@@ -1,0 +1,5 @@
+sources:
+  - esp8266/src
+
+build_vars:
+  MGOS_WIFI_ENABLE_AP_STA: 1
