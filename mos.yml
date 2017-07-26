@@ -38,6 +38,9 @@ config_schema:
   - ["wifi.ap.dhcp_end", "s", "192.168.4.100", {title: "DHCP End Address"}]
   - ["wifi.ap.trigger_on_gpio", "i", -1, {title: "Trigger AP on low GPIO"}]
 
+build_vars:
+  MGOS_WIFI_ENABLE_AP_STA: 0
+
 conds:
   - when: build_vars.MGOS_WIFI_ENABLE_AP_STA == "1"
     apply:
