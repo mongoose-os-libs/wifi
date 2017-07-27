@@ -292,7 +292,7 @@ bool mgos_wifi_set_config(const struct sys_config_wifi *cfg) {
 
   if (trigger_ap || (cfg->ap.enable && !cfg->sta.enable)) {
     result = mgos_wifi_setup_ap(&cfg->ap);
-#ifdef MGOS_WIFI_ENABLE_AP_STA
+#ifdef MGOS_WIFI_ENABLE_AP_STA /* ifdef-ok */
   } else if (cfg->ap.enable && cfg->sta.enable && cfg->ap.keep_enabled) {
     result = (mgos_wifi_setup_ap(&cfg->ap) && mgos_wifi_setup_sta(&cfg->sta));
 #endif
