@@ -280,9 +280,8 @@ void mgos_wifi_scan(mgos_wifi_scan_cb_t cb, void *arg) {
 }
 
 bool mgos_wifi_set_config(const struct sys_config_wifi *cfg) {
-  bool result = false;
+  bool result = false, trigger_ap = false;
   int gpio = cfg->ap.trigger_on_gpio;
-  int trigger_ap = 0;
 
   if (gpio >= 0) {
     mgos_gpio_set_mode(gpio, MGOS_GPIO_MODE_INPUT);
@@ -291,13 +290,22 @@ bool mgos_wifi_set_config(const struct sys_config_wifi *cfg) {
   }
 
   if (trigger_ap || (cfg->ap.enable && !cfg->sta.enable)) {
-    result = mgos_wifi_setup_ap(&cfg->ap);
+    struct sys_config_wifi_ap ap_cfg;
+    memcpy(&ap_cfg, &cfg->ap, sizeof(ap_cfg));
+    ap_cfg.enable = true;
+    LOG(LL_INFO, ("WiFi mode: %s", "AP"));
+    result = mgos_wifi_setup_ap(&ap_cfg);
 #ifdef MGOS_WIFI_ENABLE_AP_STA /* ifdef-ok */
   } else if (cfg->ap.enable && cfg->sta.enable && cfg->ap.keep_enabled) {
+    LOG(LL_INFO, ("WiFi mode: %s", "AP+STA"));
     result = (mgos_wifi_setup_ap(&cfg->ap) && mgos_wifi_setup_sta(&cfg->sta));
 #endif
   } else if (cfg->sta.enable) {
+    LOG(LL_INFO, ("WiFi mode: %s", "STA"));
     result = mgos_wifi_setup_sta(&cfg->sta);
+  } else {
+    LOG(LL_INFO, ("WiFi mode: %s", "off"));
+    result = true;
   }
 
   return result;
