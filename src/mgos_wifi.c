@@ -242,12 +242,12 @@ static void scan_cb_cb(void *arg) {
   SLIST_HEAD(scan_cbs, cb_info) scan_cbs;
   memcpy(&scan_cbs, &s_scan_cbs, sizeof(scan_cbs));
   memset(&s_scan_cbs, 0, sizeof(s_scan_cbs));
+  wifi_unlock();
   struct cb_info *cbi, *cbit;
   SLIST_FOREACH_SAFE(cbi, &scan_cbs, next, cbit) {
     ((mgos_wifi_scan_cb_t) cbi->cb)(ri->num_res, ri->res, cbi->arg);
     free(cbi);
   }
-  wifi_unlock();
   free(ri->res);
   free(ri);
 }
