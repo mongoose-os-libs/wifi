@@ -347,7 +347,7 @@ void wifi_scan_done(void *arg, STATUS status) {
   int n = 0;
   STAILQ_FOREACH(p, info, next) n++;
   res = calloc(n, sizeof(*res));
-  if (res == NULL) {
+  if (n > 0 && res == NULL) {
     LOG(LL_ERROR, ("Out of memory"));
     mgos_wifi_dev_scan_cb(-1, NULL);
     return;
