@@ -329,7 +329,8 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
 
     esp_wifi_sta_wpa2_ent_clear_new_password();
     esp_wifi_sta_wpa2_ent_set_disable_time_check(true /* disable */);
-    esp_wifi_sta_wpa2_ent_enable();
+    esp_wpa2_config_t config = WPA2_CONFIG_INIT_DEFAULT();
+    esp_wifi_sta_wpa2_ent_enable(&config);
   } else {
     esp_wifi_sta_wpa2_ent_disable();
   }
