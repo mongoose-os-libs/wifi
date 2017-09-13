@@ -83,6 +83,11 @@ void mgos_wifi_scan(mgos_wifi_scan_cb_t cb, void *arg);
 
 bool mgos_wifi_init(void);
 
+#ifdef MGOS_HAVE_MJS
+struct mjs;
+void mgos_wifi_scan_js(struct mjs *mjs);
+#endif
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
