@@ -142,12 +142,12 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
   sta_cfg.bssid_set = 0;
   strncpy((char *) sta_cfg.ssid, cfg->ssid, sizeof(sta_cfg.ssid));
 
-  if (cfg->ip != NULL && cfg->netmask != NULL) {
+  if (!mgos_conf_str_empty(cfg->ip) && !mgos_conf_str_empty(cfg->netmask)) {
     struct ip_info info;
     memset(&info, 0, sizeof(info));
     info.ip.addr = ipaddr_addr(cfg->ip);
     info.netmask.addr = ipaddr_addr(cfg->netmask);
-    if (cfg->gw != NULL) info.gw.addr = ipaddr_addr(cfg->gw);
+    if (!mgos_conf_str_empty(cfg->gw)) info.gw.addr = ipaddr_addr(cfg->gw);
     wifi_station_dhcpc_stop();
     if (!wifi_set_ip_info(STATION_IF, &info)) {
       LOG(LL_ERROR, ("WiFi STA: Failed to set IP config"));
@@ -157,7 +157,8 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
                   (cfg->gw ? cfg->gw : "")));
   }
 
-  if (cfg->user == NULL /* Not using EAP */ && cfg->pass != NULL) {
+  if (mgos_conf_str_empty(cfg->user) /* Not using EAP */ &&
+      !mgos_conf_str_empty(cfg->pass)) {
     strncpy((char *) sta_cfg.password, cfg->pass, sizeof(sta_cfg.password));
   }
 
@@ -166,13 +167,13 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
     return false;
   }
 
-  if (cfg->cert != NULL || cfg->user != NULL) {
+  if (!mgos_conf_str_empty(cfg->cert) || !mgos_conf_str_empty(cfg->user)) {
     /* WPA-enterprise mode */
     static char *s_ca_cert_pem = NULL, *s_cert_pem = NULL, *s_key_pem = NULL;
 
     wifi_station_set_enterprise_username((u8 *) cfg->user, strlen(cfg->user));
 
-    if (cfg->anon_identity != NULL) {
+    if (!mgos_conf_str_empty(cfg->anon_identity)) {
       wifi_station_set_enterprise_identity((unsigned char *) cfg->anon_identity,
                                            strlen(cfg->anon_identity));
     } else {
@@ -181,13 +182,13 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
                                            strlen(cfg->user));
     }
 
-    if (cfg->pass != NULL) {
+    if (!mgos_conf_str_empty(cfg->pass)) {
       wifi_station_set_enterprise_password((u8 *) cfg->pass, strlen(cfg->pass));
     } else {
       wifi_station_clear_enterprise_password();
     }
 
-    if (cfg->ca_cert != NULL) {
+    if (!mgos_conf_str_empty(cfg->ca_cert)) {
       free(s_ca_cert_pem);
       size_t len;
       s_ca_cert_pem = cs_read_file(cfg->ca_cert, &len);
@@ -200,7 +201,7 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
       wifi_station_clear_enterprise_ca_cert();
     }
 
-    if (cfg->cert != NULL && cfg->key != NULL) {
+    if (!mgos_conf_str_empty(cfg->cert) && !mgos_conf_str_empty(cfg->key)) {
       free(s_cert_pem);
       free(s_key_pem);
       size_t cert_len, key_len;
@@ -248,7 +249,7 @@ bool mgos_wifi_dev_ap_setup(const struct sys_config_wifi_ap *cfg) {
 
   strncpy((char *) ap_cfg.ssid, cfg->ssid, sizeof(ap_cfg.ssid));
   mgos_expand_mac_address_placeholders((char *) ap_cfg.ssid);
-  if (cfg->pass != NULL) {
+  if (!mgos_conf_str_empty(cfg->pass)) {
     strncpy((char *) ap_cfg.password, cfg->pass, sizeof(ap_cfg.password));
     ap_cfg.authmode = AUTH_WPA2_PSK;
   } else {

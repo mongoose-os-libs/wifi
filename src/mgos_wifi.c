@@ -105,20 +105,21 @@ void mgos_wifi_remove_on_change_cb(mgos_wifi_changed_t cb, void *arg) {
 bool mgos_wifi_validate_sta_cfg(const struct sys_config_wifi_sta *cfg,
                                 char **msg) {
   if (!cfg->enable) return true;
-  if (cfg->ssid == NULL || strlen(cfg->ssid) > 31) {
+  if (mgos_conf_str_empty(cfg->ssid) || strlen(cfg->ssid) > 31) {
     if (!mg_asprintf(msg, 0, "%s %s must be between %d and %d chars", "STA",
                      "SSID", 1, 31)) {
     }
     return false;
   }
-  if (cfg->pass != NULL && (strlen(cfg->pass) < 8 || strlen(cfg->pass) > 63)) {
+  if (!mgos_conf_str_empty(cfg->pass) &&
+      (strlen(cfg->pass) < 8 || strlen(cfg->pass) > 63)) {
     if (!mg_asprintf(msg, 0, "%s %s must be between %d and %d chars", "STA",
                      "password", 8, 63)) {
     }
     return false;
   }
-  if (cfg->ip != NULL) {
-    if (cfg->netmask == NULL) {
+  if (!mgos_conf_str_empty(cfg->ip)) {
+    if (mgos_conf_str_empty(cfg->netmask)) {
       if (!mg_asprintf(msg, 0,
                        "Station static IP is set but no netmask provided")) {
       }
@@ -132,20 +133,22 @@ bool mgos_wifi_validate_sta_cfg(const struct sys_config_wifi_sta *cfg,
 bool mgos_wifi_validate_ap_cfg(const struct sys_config_wifi_ap *cfg,
                                char **msg) {
   if (!cfg->enable) return true;
-  if (cfg->ssid == NULL || strlen(cfg->ssid) > 31) {
+  if (mgos_conf_str_empty(cfg->ssid) || strlen(cfg->ssid) > 31) {
     if (!mg_asprintf(msg, 0, "%s %s must be between %d and %d chars", "AP",
                      "SSID", 1, 31)) {
     }
     return false;
   }
-  if (cfg->pass != NULL && (strlen(cfg->pass) < 8 || strlen(cfg->pass) > 63)) {
+  if (!mgos_conf_str_empty(cfg->pass) &&
+      (strlen(cfg->pass) < 8 || strlen(cfg->pass) > 63)) {
     if (!mg_asprintf(msg, 0, "%s %s must be between %d and %d chars", "AP",
                      "password", 8, 63)) {
     }
     return false;
   }
-  if (cfg->ip == NULL || cfg->netmask == NULL || cfg->dhcp_start == NULL ||
-      cfg->dhcp_end == NULL) {
+  if (mgos_conf_str_empty(cfg->ip) || mgos_conf_str_empty(cfg->netmask) ||
+      mgos_conf_str_empty(cfg->dhcp_start) ||
+      mgos_conf_str_empty(cfg->dhcp_end)) {
     *msg = strdup("AP IP, netmask, DHCP start and end addresses must be set");
     return false;
   }

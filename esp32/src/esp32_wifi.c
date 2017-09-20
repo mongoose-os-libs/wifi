@@ -241,17 +241,18 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
   if (r != ESP_OK) goto out;
 
   strncpy((char *) stacfg->ssid, cfg->ssid, sizeof(stacfg->ssid));
-  if (cfg->user == NULL /* Not using EAP */ && cfg->pass != NULL) {
+  if (mgos_conf_str_empty(cfg->user) /* Not using EAP */ &&
+      !mgos_conf_str_empty(cfg->pass)) {
     strncpy((char *) stacfg->password, cfg->pass, sizeof(stacfg->password));
   }
 
-  if (cfg->ip != NULL && cfg->netmask != NULL) {
+  if (!mgos_conf_str_empty(cfg->ip) && !mgos_conf_str_empty(cfg->netmask)) {
     tcpip_adapter_dhcpc_stop(TCPIP_ADAPTER_IF_STA);
     tcpip_adapter_ip_info_t info;
     memset(&info, 0, sizeof(info));
     info.ip.addr = ipaddr_addr(cfg->ip);
     info.netmask.addr = ipaddr_addr(cfg->netmask);
-    if (cfg->gw != NULL) info.gw.addr = ipaddr_addr(cfg->gw);
+    if (!mgos_conf_str_empty(cfg->gw)) info.gw.addr = ipaddr_addr(cfg->gw);
     r = tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_STA, &info);
     if (r != ESP_OK) {
       LOG(LL_ERROR, ("Failed to set WiFi STA IP config: %d", r));
@@ -269,14 +270,14 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
     goto out;
   }
 
-  if (cfg->cert != NULL || cfg->user != NULL) {
+  if (!mgos_conf_str_empty(cfg->cert) || !mgos_conf_str_empty(cfg->user)) {
     /* WPA-enterprise mode */
     static char *s_ca_cert_pem = NULL, *s_cert_pem = NULL, *s_key_pem = NULL;
 
     esp_wifi_sta_wpa2_ent_set_username((unsigned char *) cfg->user,
                                        strlen(cfg->user));
 
-    if (cfg->anon_identity != NULL) {
+    if (!mgos_conf_str_empty(cfg->anon_identity)) {
       esp_wifi_sta_wpa2_ent_set_identity((unsigned char *) cfg->anon_identity,
                                          strlen(cfg->anon_identity));
     } else {
@@ -284,14 +285,14 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
       esp_wifi_sta_wpa2_ent_set_identity((unsigned char *) cfg->user,
                                          strlen(cfg->user));
     }
-    if (cfg->pass != NULL) {
+    if (!mgos_conf_str_empty(cfg->pass)) {
       esp_wifi_sta_wpa2_ent_set_password((unsigned char *) cfg->pass,
                                          strlen(cfg->pass));
     } else {
       esp_wifi_sta_wpa2_ent_clear_password();
     }
 
-    if (cfg->ca_cert != NULL) {
+    if (!mgos_conf_str_empty(cfg->ca_cert)) {
       free(s_ca_cert_pem);
       size_t len;
       s_ca_cert_pem = cs_read_file(cfg->ca_cert, &len);
@@ -305,7 +306,7 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
       esp_wifi_sta_wpa2_ent_clear_ca_cert();
     }
 
-    if (cfg->cert != NULL && cfg->key != NULL) {
+    if (!mgos_conf_str_empty(cfg->cert) && !mgos_conf_str_empty(cfg->key)) {
       free(s_cert_pem);
       free(s_key_pem);
       size_t cert_len, key_len;
@@ -364,7 +365,7 @@ bool mgos_wifi_dev_ap_setup(const struct sys_config_wifi_ap *cfg) {
 
   strncpy((char *) apcfg->ssid, cfg->ssid, sizeof(apcfg->ssid));
   mgos_expand_mac_address_placeholders((char *) apcfg->ssid);
-  if (cfg->pass != NULL) {
+  if (!mgos_conf_str_empty(cfg->pass)) {
     strncpy((char *) apcfg->password, cfg->pass, sizeof(apcfg->password));
     apcfg->authmode = WIFI_AUTH_WPA2_PSK;
   } else {
@@ -388,7 +389,7 @@ bool mgos_wifi_dev_ap_setup(const struct sys_config_wifi_ap *cfg) {
     memset(&info, 0, sizeof(info));
     info.ip.addr = ipaddr_addr(cfg->ip);
     info.netmask.addr = ipaddr_addr(cfg->netmask);
-    if (cfg->gw != NULL) info.gw.addr = ipaddr_addr(cfg->gw);
+    if (!mgos_conf_str_empty(cfg->gw)) info.gw.addr = ipaddr_addr(cfg->gw);
     r = tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &info);
     if (r != ESP_OK) {
       LOG(LL_ERROR, ("WiFi AP: Failed to set IP config: %d", r));

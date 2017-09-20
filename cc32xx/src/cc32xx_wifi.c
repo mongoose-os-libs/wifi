@@ -160,24 +160,30 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *e) {
 bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
   free_wifi_config();
   s_wifi_sta_config.ssid = strdup(cfg->ssid);
-  if (cfg->pass != NULL) s_wifi_sta_config.pass = strdup(cfg->pass);
-  if (cfg->user != NULL) s_wifi_sta_config.user = strdup(cfg->user);
-  if (cfg->anon_identity != NULL)
+  if (!mgos_conf_str_empty(cfg->pass)) {
+    s_wifi_sta_config.pass = strdup(cfg->pass);
+  }
+  if (!mgos_conf_str_empty(cfg->user)) {
+    s_wifi_sta_config.user = strdup(cfg->user);
+  }
+  if (!mgos_conf_str_empty(cfg->anon_identity)) {
     s_wifi_sta_config.anon_identity = strdup(cfg->anon_identity);
+  }
 
   memset(&s_wifi_sta_config.static_ip, 0, sizeof(s_wifi_sta_config.static_ip));
-  if (cfg->ip != NULL && cfg->netmask != NULL) {
+  if (!mgos_conf_str_empty(cfg->ip) && !mgos_conf_str_empty(cfg->netmask)) {
     SlNetCfgIpV4Args_t *ipcfg = &s_wifi_sta_config.static_ip;
 #if SL_MAJOR_VERSION_NUM >= 2
     if (!inet_pton(AF_INET, cfg->ip, &ipcfg->Ip) ||
         !inet_pton(AF_INET, cfg->netmask, &ipcfg->IpMask) ||
-        (cfg->ip != NULL && !inet_pton(AF_INET, cfg->gw, &ipcfg->IpGateway))) {
+        (!mgos_conf_str_empty(cfg->ip) &&
+         !inet_pton(AF_INET, cfg->gw, &ipcfg->IpGateway))) {
       return false;
     }
 #else
     if (!inet_pton(AF_INET, cfg->ip, &ipcfg->ipV4) ||
         !inet_pton(AF_INET, cfg->netmask, &ipcfg->ipV4Mask) ||
-        (cfg->ip != NULL &&
+        (!mgos_conf_str_empty(cfg->ip) &&
          !inet_pton(AF_INET, cfg->gw, &ipcfg->ipV4Gateway))) {
       return false;
     }
@@ -205,8 +211,8 @@ bool mgos_wifi_dev_ap_setup(const struct sys_config_wifi_ap *cfg) {
     return false;
   }
 
-  v = (cfg->pass != NULL && strlen(cfg->pass) > 0) ? SL_WLAN_SEC_TYPE_WPA
-                                                   : SL_WLAN_SEC_TYPE_OPEN;
+  v = mgos_conf_str_empty(cfg->pass) ? SL_WLAN_SEC_TYPE_OPEN
+                                     : SL_WLAN_SEC_TYPE_WPA;
   if ((ret = sl_WlanSet(SL_WLAN_CFG_AP_ID, SL_WLAN_AP_OPT_SECURITY_TYPE, 1,
                         &v)) != 0) {
     return false;
