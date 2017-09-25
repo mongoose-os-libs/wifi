@@ -87,7 +87,9 @@ static bool restart_nwp(SlWlanMode_e role) {
    * Suspend FS I/O while NWP is being restarted.
    */
   mgos_lock();
+#if CS_PLATFORM == CS_P_CC3200
   cc32xx_vfs_dev_slfs_container_flush_all();
+#endif
   if (sl_WlanSetMode(role) != 0) return false;
   /* Without a delay in sl_Stop subsequent sl_Start gets stuck sometimes. */
   sl_Stop(10);
