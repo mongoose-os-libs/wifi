@@ -403,8 +403,9 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
     opt.enable = true;
     opt.start_ip.addr = ipaddr_addr(cfg->dhcp_start);
     opt.end_ip.addr = ipaddr_addr(cfg->dhcp_end);
-    r = tcpip_adapter_dhcps_option(TCPIP_ADAPTER_OP_SET, REQUESTED_IP_ADDRESS,
-                                   &opt, sizeof(opt));
+    r = tcpip_adapter_dhcps_option(TCPIP_ADAPTER_OP_SET,
+                                   TCPIP_ADAPTER_REQUESTED_IP_ADDRESS, &opt,
+                                   sizeof(opt));
     if (r != ESP_OK) {
       LOG(LL_ERROR, ("WiFi AP: Failed to set DHCP config: %d", r));
       goto out;
