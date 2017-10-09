@@ -356,7 +356,7 @@ bool mgos_wifi_dev_sta_connect(void) {
   return true;
 }
 
-bool mgos_wifi_dev_disconnect(void) {
+bool mgos_wifi_dev_sta_disconnect(void) {
   free_wifi_config();
   return (sl_WlanDisconnect() == 0);
 }
