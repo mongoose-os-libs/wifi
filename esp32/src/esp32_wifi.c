@@ -215,17 +215,18 @@ out:
   return r;
 }
 
-static esp_err_t wifi_sta_set_host_name(const struct sys_config_wifi_sta *cfg) {
+static esp_err_t wifi_sta_set_host_name(
+    const struct mgos_config_wifi_sta *cfg) {
   esp_err_t r = ESP_OK;
-  char *host_name =
-      cfg->dhcp_hostname ? cfg->dhcp_hostname : get_cfg()->device.id;
+  const char *host_name =
+      cfg->dhcp_hostname ? cfg->dhcp_hostname : mgos_sys_config_get_device_id();
   if (host_name != NULL) {
     r = tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA, host_name);
   }
   return r;
 }
 
-bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
+bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   bool result = false;
   esp_err_t r;
   wifi_config_t wcfg;
@@ -348,7 +349,7 @@ out:
   return result;
 }
 
-bool mgos_wifi_dev_ap_setup(const struct sys_config_wifi_ap *cfg) {
+bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   bool result = false;
   esp_err_t r;
   wifi_config_t wcfg;

@@ -159,7 +159,7 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *e) {
   sl_net_app_eh(e);
 }
 
-bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
+bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   free_wifi_config();
   s_wifi_sta_config.ssid = strdup(cfg->ssid);
   if (!mgos_conf_str_empty(cfg->pass)) {
@@ -195,7 +195,7 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
   return true;
 }
 
-bool mgos_wifi_dev_ap_setup(const struct sys_config_wifi_ap *cfg) {
+bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   int ret;
   uint8_t v;
   SlNetCfgIpV4Args_t ipcfg;
@@ -327,7 +327,8 @@ bool mgos_wifi_dev_sta_connect(void) {
     sp.Key = (_i8 *) s_wifi_sta_config.pass;
     sp.KeyLen = strlen(s_wifi_sta_config.pass);
   }
-  if (s_wifi_sta_config.user != NULL && get_cfg()->wifi.sta.eap_method != 0) {
+  if (s_wifi_sta_config.user != NULL &&
+      mgos_sys_config_get_wifi_sta_eap_method() != 0) {
     /* WPA-enterprise mode */
     sp.Type = SL_WLAN_SEC_TYPE_WPA_ENT;
     spext.UserLen = strlen(s_wifi_sta_config.user);
@@ -336,7 +337,7 @@ bool mgos_wifi_dev_sta_connect(void) {
       spext.AnonUserLen = strlen(s_wifi_sta_config.anon_identity);
       spext.AnonUser = (_i8 *) s_wifi_sta_config.anon_identity;
     }
-    spext.EapMethod = get_cfg()->wifi.sta.eap_method;
+    spext.EapMethod = mgos_sys_config_get_wifi_sta_eap_method();
     unsigned char v = 0;
     sl_WlanSet(SL_WLAN_CFG_GENERAL_PARAM_ID, 19, 1, &v);
   } else {

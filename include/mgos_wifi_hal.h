@@ -15,9 +15,9 @@ extern "C" {
 
 /* HAL interface, to be implemented by ports. */
 
-bool mgos_wifi_dev_ap_setup(const struct sys_config_wifi_ap *cfg);
+bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg);
 
-bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg);
+bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg);
 bool mgos_wifi_dev_sta_connect(void); /* To the previously _setup network. */
 bool mgos_wifi_dev_sta_disconnect(void);
 enum mgos_wifi_status mgos_wifi_dev_sta_get_status(void);

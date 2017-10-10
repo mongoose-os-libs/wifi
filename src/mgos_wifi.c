@@ -102,7 +102,7 @@ void mgos_wifi_remove_on_change_cb(mgos_wifi_changed_t cb, void *arg) {
   }
 }
 
-bool mgos_wifi_validate_sta_cfg(const struct sys_config_wifi_sta *cfg,
+bool mgos_wifi_validate_sta_cfg(const struct mgos_config_wifi_sta *cfg,
                                 char **msg) {
   if (!cfg->enable) return true;
   if (mgos_conf_str_empty(cfg->ssid) || strlen(cfg->ssid) > 31) {
@@ -130,7 +130,7 @@ bool mgos_wifi_validate_sta_cfg(const struct sys_config_wifi_sta *cfg,
   return true;
 }
 
-bool mgos_wifi_validate_ap_cfg(const struct sys_config_wifi_ap *cfg,
+bool mgos_wifi_validate_ap_cfg(const struct mgos_config_wifi_ap *cfg,
                                char **msg) {
   if (!cfg->enable) return true;
   if (mgos_conf_str_empty(cfg->ssid) || strlen(cfg->ssid) > 31) {
@@ -156,12 +156,12 @@ bool mgos_wifi_validate_ap_cfg(const struct sys_config_wifi_ap *cfg,
   return true;
 }
 
-static bool validate_wifi_cfg(const struct sys_config *cfg, char **msg) {
+static bool validate_wifi_cfg(const struct mgos_config *cfg, char **msg) {
   return (mgos_wifi_validate_ap_cfg(&cfg->wifi.ap, msg) &&
           mgos_wifi_validate_sta_cfg(&cfg->wifi.sta, msg));
 }
 
-bool mgos_wifi_setup_sta(const struct sys_config_wifi_sta *cfg) {
+bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
   char *err_msg = NULL;
   if (!mgos_wifi_validate_sta_cfg(cfg, &err_msg)) {
     LOG(LL_ERROR, ("WiFi STA: %s", err_msg));
@@ -178,7 +178,7 @@ bool mgos_wifi_setup_sta(const struct sys_config_wifi_sta *cfg) {
   return ret;
 }
 
-bool mgos_wifi_setup_ap(const struct sys_config_wifi_ap *cfg) {
+bool mgos_wifi_setup_ap(const struct mgos_config_wifi_ap *cfg) {
   char *err_msg = NULL;
   if (!mgos_wifi_validate_ap_cfg(cfg, &err_msg)) {
     LOG(LL_ERROR, ("WiFi AP: %s", err_msg));
@@ -282,7 +282,7 @@ void mgos_wifi_scan(mgos_wifi_scan_cb_t cb, void *arg) {
   wifi_unlock();
 }
 
-bool mgos_wifi_set_config(const struct sys_config_wifi *cfg) {
+bool mgos_wifi_set_config(const struct mgos_config_wifi *cfg) {
   bool result = false, trigger_ap = false;
   int gpio = cfg->ap.trigger_on_gpio;
 
@@ -293,7 +293,7 @@ bool mgos_wifi_set_config(const struct sys_config_wifi *cfg) {
   }
 
   if (trigger_ap || (cfg->ap.enable && !cfg->sta.enable)) {
-    struct sys_config_wifi_ap ap_cfg;
+    struct mgos_config_wifi_ap ap_cfg;
     memcpy(&ap_cfg, &cfg->ap, sizeof(ap_cfg));
     ap_cfg.enable = true;
     LOG(LL_INFO, ("WiFi mode: %s", "AP"));
@@ -318,5 +318,5 @@ bool mgos_wifi_init(void) {
   s_wifi_lock = mgos_new_rlock();
   mgos_register_config_validator(validate_wifi_cfg);
   mgos_wifi_dev_init();
-  return mgos_wifi_set_config(&get_cfg()->wifi);
+  return mgos_wifi_set_config(mgos_sys_config_get_wifi());
 }

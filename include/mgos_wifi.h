@@ -13,9 +13,9 @@
 extern "C" {
 #endif /* __cplusplus */
 
-bool mgos_wifi_setup_sta(const struct sys_config_wifi_sta *cfg);
+bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg);
 
-bool mgos_wifi_setup_ap(const struct sys_config_wifi_ap *cfg);
+bool mgos_wifi_setup_ap(const struct mgos_config_wifi_ap *cfg);
 
 bool mgos_wifi_connect(void); /* To the previously _setup network. */
 
@@ -42,9 +42,9 @@ void mgos_wifi_add_on_change_cb(mgos_wifi_changed_t fn, void *arg);
 /* Remove a previously added callback, fn and arg have to match exactly. */
 void mgos_wifi_remove_on_change_cb(mgos_wifi_changed_t fn, void *arg);
 
-bool mgos_wifi_validate_ap_cfg(const struct sys_config_wifi_ap *cfg,
+bool mgos_wifi_validate_ap_cfg(const struct mgos_config_wifi_ap *cfg,
                                char **msg);
-bool mgos_wifi_validate_sta_cfg(const struct sys_config_wifi_sta *cfg,
+bool mgos_wifi_validate_sta_cfg(const struct mgos_config_wifi_sta *cfg,
                                 char **msg);
 
 enum mgos_wifi_status mgos_wifi_get_status(void);

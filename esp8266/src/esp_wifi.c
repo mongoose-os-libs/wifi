@@ -127,7 +127,7 @@ static bool mgos_wifi_remove_mode(uint8_t mode) {
   return mgos_wifi_set_mode(mode);
 }
 
-bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
+bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   struct station_config sta_cfg;
   memset(&sta_cfg, 0, sizeof(sta_cfg));
 
@@ -227,9 +227,9 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
     wifi_station_set_wpa2_enterprise_auth(false /* enable */);
   }
 
-  char *host_name =
-      cfg->dhcp_hostname ? cfg->dhcp_hostname : get_cfg()->device.id;
-  if (host_name != NULL && !wifi_station_set_hostname(host_name)) {
+  const char *host_name =
+      cfg->dhcp_hostname ? cfg->dhcp_hostname : mgos_sys_config_get_device_id();
+  if (host_name != NULL && !wifi_station_set_hostname((char *) host_name)) {
     LOG(LL_ERROR, ("WiFi STA: Failed to set host name"));
     return false;
   }
@@ -237,7 +237,7 @@ bool mgos_wifi_dev_sta_setup(const struct sys_config_wifi_sta *cfg) {
   return true;
 }
 
-bool mgos_wifi_dev_ap_setup(const struct sys_config_wifi_ap *cfg) {
+bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   struct softap_config ap_cfg;
   memset(&ap_cfg, 0, sizeof(ap_cfg));
 
