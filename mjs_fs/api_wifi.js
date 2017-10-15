@@ -1,10 +1,10 @@
-//
 // Wifi global object is created during C initialization.
-//
 
-//
-// `Wifi.scan(cb)`; `cb` is a function taking a single argument, `results` is
-// either `undefined` in case of error, or an array of object conataining:
+// ## **`Wifi.scan(cb)`**
+// Scan WiFi networks, call `cb` when done.
+// `cb` accepts a single argument `results`, which is
+// either `undefined` in case of error, or an array of object containing:
+// ```javascript
 // {
 //   "ssid": "NetworkName",
 //   "bssid": "12:34:56:78:90:ab",
@@ -12,8 +12,13 @@
 //   "channel": 11,
 //   "rssi": -70
 // }
-//
-// Wifi.scan = function(cb) { ... } /* defined in C */
+// ```
+// Example:
+// ```javascript
+// Wifi.scan(function(results) {
+//   print(JSON.stringify(results));
+// });
+// ```
 
 // Must be kept in sync with enum mgos_wifi_auth_mode
 Wifi.AUTH_MODE_OPEN = 0;
