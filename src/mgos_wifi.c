@@ -15,8 +15,8 @@
 #include "mgos_gpio.h"
 #include "mgos_hal.h"
 #include "mgos_net_hal.h"
-#include "mgos_mongoose.h"
 #include "mgos_sys_config.h"
+#include "mgos_timers.h"
 
 #include "mongoose/mongoose.h"
 
@@ -178,6 +178,15 @@ bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
   return ret;
 }
 
+static void wifi_ap_disable_timer_cb(void *arg) {
+  if (!mgos_sys_config_get_wifi_ap_enable()) return;
+  LOG(LL_INFO, ("Disabling AP"));
+  mgos_sys_config_set_wifi_ap_enable(false);
+  save_cfg(&mgos_sys_config, NULL);
+  mgos_wifi_setup_ap(&mgos_sys_config.wifi.ap);
+  (void) arg;
+}
+
 bool mgos_wifi_setup_ap(const struct mgos_config_wifi_ap *cfg) {
   char *err_msg = NULL;
   if (!mgos_wifi_validate_ap_cfg(cfg, &err_msg)) {
@@ -188,6 +197,11 @@ bool mgos_wifi_setup_ap(const struct mgos_config_wifi_ap *cfg) {
   wifi_lock();
   bool ret = mgos_wifi_dev_ap_setup(cfg);
   wifi_unlock();
+  if (cfg->enable && ret && cfg->disable_after > 0) {
+    LOG(LL_INFO, ("WiFi AP: Enabled for %d seconds", cfg->disable_after));
+    mgos_set_timer(cfg->disable_after * 1000, 0, wifi_ap_disable_timer_cb,
+                   NULL);
+  }
   return ret;
 }
 
