@@ -296,7 +296,7 @@ void mgos_wifi_scan(mgos_wifi_scan_cb_t cb, void *arg) {
   wifi_unlock();
 }
 
-bool mgos_wifi_set_config(const struct mgos_config_wifi *cfg) {
+bool mgos_wifi_setup(const struct mgos_config_wifi *cfg) {
   bool result = false, trigger_ap = false;
   int gpio = cfg->ap.trigger_on_gpio;
 
@@ -332,5 +332,5 @@ bool mgos_wifi_init(void) {
   s_wifi_lock = mgos_new_rlock();
   mgos_register_config_validator(validate_wifi_cfg);
   mgos_wifi_dev_init();
-  return mgos_wifi_set_config(mgos_sys_config_get_wifi());
+  return mgos_wifi_setup(mgos_sys_config_get_wifi());
 }

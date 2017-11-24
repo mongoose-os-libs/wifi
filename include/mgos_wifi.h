@@ -17,6 +17,8 @@ bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg);
 
 bool mgos_wifi_setup_ap(const struct mgos_config_wifi_ap *cfg);
 
+bool mgos_wifi_setup(const struct mgos_config_wifi *cfg);
+
 bool mgos_wifi_connect(void); /* To the previously _setup network. */
 
 bool mgos_wifi_disconnect(void);
