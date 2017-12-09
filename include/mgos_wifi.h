@@ -54,6 +54,11 @@ enum mgos_wifi_status mgos_wifi_get_status(void);
 char *mgos_wifi_get_status_str(void);
 char *mgos_wifi_get_connected_ssid(void);
 char *mgos_wifi_get_sta_default_dns(void);
+/*
+ * Returns RSSI of the station if connected to an AP, otherwise 0.
+ * Note: RSSI is a negative number.
+ */
+int mgos_wifi_sta_get_rssi(void);
 
 /*
  * Callback must be invoked, with list of SSIDs or NULL on error.

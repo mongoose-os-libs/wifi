@@ -59,6 +59,7 @@
 #define SL_WLAN_SECURITY_TYPE_BITMAP_WPA2 SL_SCAN_SEC_TYPE_WPA2
 
 #define SlWlanNetworkEntry_t Sl_WlanNetworkEntry_t
+#define SlWlanGetRxStatResponse_t SlGetRxStatResponse_t
 
 #endif
 
@@ -486,6 +487,26 @@ out:
     free(res);
   }
   return ret;
+}
+
+int mgos_wifi_sta_get_rssi(void) {
+  if (s_current_role != ROLE_STA) return 0;
+  SlWlanGetRxStatResponse_t rx_stats;
+  _i16 r = sl_WlanRxStatGet(&rx_stats, 0);
+  if (r == 0) {
+    int s = 0, n = 0;
+    if (rx_stats.AvarageDataCtrlRssi < 0) {
+      s += rx_stats.AvarageDataCtrlRssi;
+      n++;
+    }
+    if (rx_stats.AvarageMgMntRssi < 0) {
+      s += rx_stats.AvarageMgMntRssi;
+      n++;
+    }
+    return (n > 0 ? s / n : 0);
+  } else {
+    return 0;
+  }
 }
 
 void mgos_wifi_dev_init(void) {

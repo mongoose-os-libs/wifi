@@ -337,6 +337,11 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
   return true;
 }
 
+int mgos_wifi_sta_get_rssi(void) {
+  int rssi = wifi_station_get_rssi();
+  return (rssi < 0 ? rssi : 0);
+}
+
 void wifi_scan_done(void *arg, STATUS status) {
   if (status != OK) {
     mgos_wifi_dev_scan_cb(-1, NULL);

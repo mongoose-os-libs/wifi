@@ -482,6 +482,12 @@ char *mgos_wifi_get_sta_default_dns() {
   return dns;
 }
 
+int mgos_wifi_sta_get_rssi(void) {
+  wifi_ap_record_t info;
+  if (esp_wifi_sta_get_ap_info(&info) != ESP_OK) return 0;
+  return info.rssi;
+}
+
 bool mgos_wifi_dev_start_scan(void) {
   esp_err_t r = ESP_OK;
   if (s_cur_mode != WIFI_MODE_STA && s_cur_mode != WIFI_MODE_APSTA) {
