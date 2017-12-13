@@ -14,6 +14,7 @@
 
 #include "mgos_gpio.h"
 #include "mgos_hal.h"
+#include "mgos_mongoose.h"
 #include "mgos_net_hal.h"
 #include "mgos_sys_config.h"
 #include "mgos_timers.h"
@@ -328,11 +329,57 @@ bool mgos_wifi_setup(const struct mgos_config_wifi *cfg) {
   return result;
 }
 
+/*
+ * Handler of DNS requests, it resolves mgos_sys_config_get_wifi_ap_hostname()
+ * to the IP address of wifi AP (mgos_sys_config_get_wifi_ap_ip()).
+ */
+static void dns_ev_handler(struct mg_connection *c, int ev, void *ev_data,
+                           void *user_data) {
+  struct mg_dns_message *msg = (struct mg_dns_message *) ev_data;
+  struct mbuf reply_buf;
+  int i;
+
+  if (ev != MG_DNS_MESSAGE) return;
+
+  mbuf_init(&reply_buf, 512);
+  struct mg_dns_reply reply = mg_dns_create_reply(&reply_buf, msg);
+  for (i = 0; i < msg->num_questions; i++) {
+    char rname[256];
+    struct mg_dns_resource_record *rr = &msg->questions[i];
+    mg_dns_uncompress_name(msg, &rr->name, rname, sizeof(rname) - 1);
+    if (rr->rtype == MG_DNS_A_RECORD &&
+        strcmp(rname, mgos_sys_config_get_wifi_ap_hostname()) == 0) {
+      uint32_t ip;
+      if (inet_pton(AF_INET, mgos_sys_config_get_wifi_ap_ip(), &ip)) {
+        mg_dns_reply_record(&reply, rr, NULL, rr->rtype, 10, &ip, 4);
+      }
+    }
+  }
+  mg_dns_send_reply(c, &reply);
+  mbuf_free(&reply_buf);
+  (void) user_data;
+}
+
 bool mgos_wifi_init(void) {
   s_wifi_lock = mgos_new_rlock();
   mgos_register_config_validator(validate_wifi_cfg);
   mgos_wifi_dev_init();
-  return mgos_wifi_setup(mgos_sys_config_get_wifi());
+  bool ret = mgos_wifi_setup(mgos_sys_config_get_wifi());
+  if (!ret) {
+    return ret;
+  }
+
+  /* Setup DNS handler if needed */
+  if (mgos_sys_config_get_wifi_ap_enable() &&
+      mgos_sys_config_get_wifi_ap_hostname() != NULL) {
+    char buf[50];
+    sprintf(buf, "udp://%s:53", mgos_sys_config_get_wifi_ap_ip());
+    struct mg_connection *dns_conn =
+        mg_bind(mgos_get_mgr(), buf, dns_ev_handler, 0);
+    mg_set_protocol_dns(dns_conn);
+  }
+
+  return true;
 }
 
 void mgos_wifi_deinit(void) {

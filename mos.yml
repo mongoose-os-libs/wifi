@@ -42,6 +42,7 @@ config_schema:
   - ["wifi.ap.dhcp_end", "s", "192.168.4.100", {title: "DHCP End Address"}]
   - ["wifi.ap.trigger_on_gpio", "i", -1, {title: "Trigger AP on low GPIO"}]
   - ["wifi.ap.disable_after", "i", 0, {title: "If > 0, will disable itself after the specified number of seconds"}]
+  - ["wifi.ap.hostname", "s", "", {title: "If not empty, DNS server will resolve given host name to the IP address of AP"}]
 
 build_vars:
   MGOS_WIFI_ENABLE_AP_STA: 0
@@ -53,6 +54,9 @@ conds:
         - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
       cdefs:
         MGOS_WIFI_ENABLE_AP_STA: 1
+
+cdefs:
+  MG_ENABLE_DNS_SERVER: 1
 
 tags:
   - c
