@@ -511,3 +511,6 @@ int mgos_wifi_sta_get_rssi(void) {
 
 void mgos_wifi_dev_init(void) {
 }
+
+void mgos_wifi_dev_deinit(void) {
+}

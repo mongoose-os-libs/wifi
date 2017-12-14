@@ -402,6 +402,10 @@ void mgos_wifi_dev_init(void) {
   wifi_set_event_handler_cb(wifi_changed_cb);
 }
 
+void mgos_wifi_dev_deinit(void) {
+  wifi_set_opmode_current(NULL_MODE);
+}
+
 char *mgos_wifi_get_sta_default_dns() {
   char *dns;
   ip_addr_t dns_addr = dns_getserver(0);

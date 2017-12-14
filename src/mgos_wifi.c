@@ -334,3 +334,7 @@ bool mgos_wifi_init(void) {
   mgos_wifi_dev_init();
   return mgos_wifi_setup(mgos_sys_config_get_wifi());
 }
+
+void mgos_wifi_deinit(void) {
+  mgos_wifi_dev_deinit();
+}

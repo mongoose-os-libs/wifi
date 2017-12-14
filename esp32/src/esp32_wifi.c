@@ -470,6 +470,14 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
 void mgos_wifi_dev_init(void) {
 }
 
+void mgos_wifi_dev_deinit(void) {
+  if (s_cur_mode != WIFI_MODE_NULL) {
+    esp_wifi_stop();
+    esp_wifi_deinit();
+    s_cur_mode = WIFI_MODE_NULL;
+  }
+}
+
 char *mgos_wifi_get_sta_default_dns() {
   char *dns;
   ip_addr_t dns_addr = dns_getserver(0);

@@ -38,6 +38,7 @@ bool mgos_wifi_dev_start_scan(void);
 void mgos_wifi_dev_scan_cb(int num_res, struct mgos_wifi_scan_result *res);
 
 void mgos_wifi_dev_init(void);
+void mgos_wifi_dev_deinit(void);
 
 #ifdef __cplusplus
 }
