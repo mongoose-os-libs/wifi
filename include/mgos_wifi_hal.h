@@ -3,6 +3,10 @@
  * All rights reserved
  */
 
+/*
+ * HAL wifi interface, to be implemented by ports.
+ */
+
 #ifndef CS_MOS_LIBS_WIFI_SRC_MGOS_WIFI_HAL_H_
 #define CS_MOS_LIBS_WIFI_SRC_MGOS_WIFI_HAL_H_
 
@@ -12,8 +16,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
-
-/* HAL interface, to be implemented by ports. */
 
 bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg);
 
