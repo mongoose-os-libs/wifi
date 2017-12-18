@@ -212,6 +212,11 @@ typedef void (*mgos_wifi_scan_cb_t)(int num_res,
  */
 void mgos_wifi_scan(mgos_wifi_scan_cb_t cb, void *arg);
 
+/*
+ * Deinitialize wifi.
+ */
+void mgos_wifi_deinit(void);
+
 #ifdef MGOS_HAVE_MJS
 struct mjs;
 /*
