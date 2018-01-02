@@ -8,7 +8,7 @@ A library adds a `wifi` configuration entry with two sub-entries: `wifi.ap`
 which contains configuration settings for the Access Point mode, and
 `wifi.sta` for the Station mode.
 
-```json
+```javascript
 "wifi": {
   "sta": {
     "enable": true,         // Enable Station mode
