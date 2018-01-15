@@ -148,6 +148,8 @@ void sl_net_app_eh(SlNetAppEvent_t *e) {
 #else
     _u32 ip = edu->ipLeased.ip_address;
     _u8 *mac = edu->ipLeased.mac;
+    (void) ip;
+    (void) mac;
 #endif
     LOG(LL_INFO,
         ("WiFi: leased %lu.%lu.%lu.%lu to %02x:%02x:%02x:%02x:%02x:%02x",
@@ -282,6 +284,8 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   sl_WlanRxStatStart();
 
   LOG(LL_INFO, ("AP %s configured", ssid));
+
+  (void) ret;
 
   return true;
 }
