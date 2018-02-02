@@ -14,6 +14,7 @@
 #include "apps/dhcpserver.h"
 #include "lwip/ip_addr.h"
 
+#include "common/cs_dbg.h"
 #include "common/cs_file.h"
 #include "common/queue.h"
 
