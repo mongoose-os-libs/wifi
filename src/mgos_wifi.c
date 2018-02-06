@@ -13,10 +13,10 @@
 #include "common/queue.h"
 
 #include "mgos_gpio.h"
-#include "mgos_hal.h"
 #include "mgos_mongoose.h"
 #include "mgos_net_hal.h"
 #include "mgos_sys_config.h"
+#include "mgos_system.h"
 #include "mgos_timers.h"
 
 #include "mongoose/mongoose.h"
@@ -361,7 +361,7 @@ static void dns_ev_handler(struct mg_connection *c, int ev, void *ev_data,
 }
 
 bool mgos_wifi_init(void) {
-  s_wifi_lock = mgos_new_rlock();
+  s_wifi_lock = mgos_rlock_create();
   mgos_register_config_validator(validate_wifi_cfg);
   mgos_wifi_dev_init();
   bool ret = mgos_wifi_setup(mgos_sys_config_get_wifi());
