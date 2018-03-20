@@ -112,10 +112,11 @@ bool mgos_wifi_validate_sta_cfg(const struct mgos_config_wifi_sta *cfg,
     }
     return false;
   }
+  // Minimum of 5 chars for password (WEP)
   if (!mgos_conf_str_empty(cfg->pass) &&
-      (strlen(cfg->pass) < 8 || strlen(cfg->pass) > 63)) {
+      (strlen(cfg->pass) < 5 || strlen(cfg->pass) > 63)) {
     if (!mg_asprintf(msg, 0, "%s %s must be between %d and %d chars", "STA",
-                     "password", 8, 63)) {
+                     "password", 5, 63)) {
     }
     return false;
   }
