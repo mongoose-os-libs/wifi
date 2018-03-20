@@ -67,6 +67,17 @@ static void mgos_wifi_on_change_cb(void *arg) {
       ws = MGOS_WIFI_IP_ACQUIRED;
       break;
     }
+    case MGOS_NET_EV_AP_CONNECTED: {
+      s_sta_status = MGOS_WIFI_AP_CONNECTED;
+      ws = MGOS_WIFI_AP_CONNECTED;
+      break;
+    }
+
+    case MGOS_NET_EV_AP_DISCONNECTED:{
+      s_sta_status = MGOS_WIFI_AP_DISCONNECTED;
+      ws = MGOS_WIFI_AP_DISCONNECTED;
+      break;
+    }
   }
 
   mgos_net_dev_event_cb(MGOS_NET_IF_TYPE_WIFI, MGOS_NET_IF_WIFI_STA, ev);
@@ -242,6 +253,12 @@ char *mgos_wifi_get_status_str(void) {
       break;
     case MGOS_WIFI_CONNECTED:
       s = "connected";
+      break;
+    case MGOS_WIFI_AP_CONNECTED:
+      s = "AP connected";
+      break;
+    case MGOS_WIFI_AP_DISCONNECTED:
+      s = "AP disconnected";
       break;
     case MGOS_WIFI_IP_ACQUIRED:
       s = "got ip";
