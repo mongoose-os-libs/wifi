@@ -67,6 +67,17 @@ static void mgos_wifi_on_change_cb(void *arg) {
       ws = MGOS_WIFI_IP_ACQUIRED;
       break;
     }
+    case MGOS_NET_EV_AP_CONNECTED: {
+      s_sta_status = MGOS_WIFI_AP_CONNECTED;
+      ws = MGOS_WIFI_AP_CONNECTED;
+      break;
+    }
+
+    case MGOS_NET_EV_AP_DISCONNECTED:{
+      s_sta_status = MGOS_WIFI_AP_DISCONNECTED;
+      ws = MGOS_WIFI_AP_DISCONNECTED;
+      break;
+    }
   }
 
   mgos_net_dev_event_cb(MGOS_NET_IF_TYPE_WIFI, MGOS_NET_IF_WIFI_STA, ev);
@@ -112,10 +123,11 @@ bool mgos_wifi_validate_sta_cfg(const struct mgos_config_wifi_sta *cfg,
     }
     return false;
   }
+  // Minimum of 5 chars for password (WEP)
   if (!mgos_conf_str_empty(cfg->pass) &&
-      (strlen(cfg->pass) < 8 || strlen(cfg->pass) > 63)) {
+      (strlen(cfg->pass) < 5 || strlen(cfg->pass) > 63)) {
     if (!mg_asprintf(msg, 0, "%s %s must be between %d and %d chars", "STA",
-                     "password", 8, 63)) {
+                     "password", 5, 63)) {
     }
     return false;
   }
@@ -241,6 +253,12 @@ char *mgos_wifi_get_status_str(void) {
       break;
     case MGOS_WIFI_CONNECTED:
       s = "connected";
+      break;
+    case MGOS_WIFI_AP_CONNECTED:
+      s = "AP connected";
+      break;
+    case MGOS_WIFI_AP_DISCONNECTED:
+      s = "AP disconnected";
       break;
     case MGOS_WIFI_IP_ACQUIRED:
       s = "got ip";

@@ -48,7 +48,13 @@ void wifi_changed_cb(System_Event_t *evt) {
       send_ev = true;
       break;
     case EVENT_SOFTAPMODE_STACONNECTED:
+      mg_ev = MGOS_NET_EV_AP_CONNECTED;
+      send_ev = true;
+      break;
     case EVENT_SOFTAPMODE_STADISCONNECTED:
+      mg_ev = MGOS_NET_EV_AP_DISCONNECTED;
+      send_ev = true;
+      break;
     case EVENT_SOFTAPMODE_PROBEREQRECVED:
     case EVENT_STAMODE_AUTHMODE_CHANGE:
     case EVENT_STAMODE_DHCP_TIMEOUT:
