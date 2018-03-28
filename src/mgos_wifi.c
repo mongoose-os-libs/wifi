@@ -19,7 +19,7 @@
 #include "mgos_system.h"
 #include "mgos_timers.h"
 
-#include "mongoose/mongoose.h"
+#include "mongoose.h"
 
 struct cb_info {
   void *cb;
