@@ -85,7 +85,7 @@ bool mgos_wifi_setup_ap(const struct mgos_config_wifi_ap *cfg);
  * };
  * ```
  */
-bool mgos_wifi_setup(const struct mgos_config_wifi *cfg);
+bool mgos_wifi_setup(struct mgos_config_wifi *cfg);
 
 /*
  * Connect to the previously setup wifi station (with `mgos_wifi_setup_sta()`).
