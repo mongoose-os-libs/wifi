@@ -443,22 +443,21 @@ char *mgos_wifi_get_sta_default_dns(void) {
 
 bool mgos_wifi_dev_start_scan(void) {
   bool ret = false;
-  int n = -1, num_res = 0;
+  int n = -1, num_res = 0, i, j;
   struct mgos_wifi_scan_result *res = NULL;
   SlWlanNetworkEntry_t info[2];
 
   if (!ensure_role_sta()) goto out;
 
-  while ((n = sl_WlanGetNetworkList(num_res, 2, info)) > 0) {
-    int i, j;
+  for (i = 0; (n = sl_WlanGetNetworkList(i, 2, info)) > 0; i += 2) {
     res = (struct mgos_wifi_scan_result *) realloc(
         res, (num_res + n) * sizeof(*res));
     if (res == NULL) {
       goto out;
     }
-    for (i = 0, j = num_res; i < n; i++) {
-      SlWlanNetworkEntry_t *e = &info[i];
-      struct mgos_wifi_scan_result *r = &res[j];
+    for (j = 0; j < n; j++) {
+      SlWlanNetworkEntry_t *e = &info[j];
+      struct mgos_wifi_scan_result *r = &res[num_res];
       _u8 sec_type = 0;
 #if SL_MAJOR_VERSION_NUM >= 2
       strncpy(r->ssid, (const char *) e->Ssid, sizeof(r->ssid));
@@ -483,15 +482,18 @@ bool mgos_wifi_dev_start_scan(void) {
         case SL_WLAN_SECURITY_TYPE_BITMAP_WPA:
           r->auth_mode = MGOS_WIFI_AUTH_MODE_WPA_PSK;
           break;
+#if SL_MAJOR_VERSION_NUM >= 2
+        case (SL_WLAN_SECURITY_TYPE_BITMAP_WPA |
+              SL_WLAN_SECURITY_TYPE_BITMAP_WPA2):
+#endif
         case SL_WLAN_SECURITY_TYPE_BITMAP_WPA2:
           r->auth_mode = MGOS_WIFI_AUTH_MODE_WPA2_PSK;
           break;
         default:
-
+          LOG(LL_INFO, ("%s Unknown sec type: %d", r->ssid, sec_type));
           continue;
       }
       num_res++;
-      j++;
     }
   }
   ret = (n == 0); /* Reached the end of the list */
