@@ -311,10 +311,8 @@ static void mgos_wifi_sta_connect_timeout_timer_cb(void *arg) {
   if (cfg == NULL) goto out;
   new_idx = mgos_wifi_get_next_sta_cfg_idx(
       cfg, (s_cur_sta_cfg_idx + 1) % NUM_STA_CFG);
-  if (new_idx == s_cur_sta_cfg_idx) {
-    /* There are no alternatives, give up. */
-    goto out;
-  }
+  /* Note: even if the config didn't change, disconnect and
+   * reconnect to re-init WiFi. */
   mgos_wifi_disconnect();
   mgos_wifi_setup_sta(mgos_wifi_get_sta_cfg(cfg, new_idx));
   s_cur_cfg = cfg;

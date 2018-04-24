@@ -454,7 +454,14 @@ bool mgos_wifi_dev_sta_connect(void) {
 }
 
 bool mgos_wifi_dev_sta_disconnect(void) {
-  return (esp_wifi_disconnect() == ESP_OK);
+  esp_wifi_disconnect();
+  /* If we are in station-only mode, stop WiFi task as well. */
+  if (s_cur_mode == WIFI_MODE_STA) {
+    esp_err_t r = esp_wifi_stop();
+    if (r == ESP_ERR_WIFI_NOT_INIT) r = ESP_OK; /* Nothing to stop. */
+    if (r == ESP_OK) s_cur_mode = WIFI_MODE_NULL;
+  }
+  return true;
 }
 
 char *mgos_wifi_get_connected_ssid(void) {
