@@ -138,6 +138,12 @@ static esp_err_t wifi_ensure_init_and_start(wifi_func_t func, void *arg) {
       LOG(LL_ERROR, ("Failed to start WiFi: %d", r));
       goto out;
     }
+    /* Workaround for https://github.com/espressif/esp-idf/issues/1942 */
+    r = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (r != ESP_OK) {
+      LOG(LL_ERROR, ("Failed to set PS mode: %d", r));
+      goto out;
+    }
     r = func(arg);
   }
 out:
