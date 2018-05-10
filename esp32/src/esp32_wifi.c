@@ -35,7 +35,10 @@
 #include "mgos_sys_config.h"
 #include "mgos_wifi_hal.h"
 
+static bool s_inited = false;
+static bool s_started = false;
 static wifi_mode_t s_cur_mode = WIFI_MODE_NULL;
+typedef esp_err_t (*wifi_func_t)(void *arg);
 
 esp_err_t esp32_wifi_ev(system_event_t *ev) {
   bool send_ev = false;
@@ -116,12 +119,9 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
   return ESP_OK;
 }
 
-typedef esp_err_t (*wifi_func_t)(void *arg);
-
 static esp_err_t wifi_ensure_init_and_start(wifi_func_t func, void *arg) {
-  esp_err_t r = func(arg);
-  if (r == ESP_OK) goto out;
-  if (r == ESP_ERR_WIFI_NOT_INIT) {
+  esp_err_t r;
+  if (!s_inited) {
     wifi_init_config_t icfg = WIFI_INIT_CONFIG_DEFAULT();
     r = esp_wifi_init(&icfg);
     if (r != ESP_OK) {
@@ -129,10 +129,9 @@ static esp_err_t wifi_ensure_init_and_start(wifi_func_t func, void *arg) {
       goto out;
     }
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
-    r = func(arg);
-    if (r == ESP_OK) goto out;
+    s_inited = true;
   }
-  if (r == ESP_ERR_WIFI_NOT_STARTED) {
+  if (!s_started) {
     r = esp_wifi_start();
     if (r != ESP_OK) {
       LOG(LL_ERROR, ("Failed to start WiFi: %d", r));
@@ -144,8 +143,8 @@ static esp_err_t wifi_ensure_init_and_start(wifi_func_t func, void *arg) {
       LOG(LL_ERROR, ("Failed to set PS mode: %d", r));
       goto out;
     }
-    r = func(arg);
   }
+  r = func(arg);
 out:
   return r;
 }
@@ -175,7 +174,10 @@ static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
   if (mode == WIFI_MODE_NULL) {
     r = esp_wifi_stop();
     if (r == ESP_ERR_WIFI_NOT_INIT) r = ESP_OK; /* Nothing to stop. */
-    if (r == ESP_OK) s_cur_mode = WIFI_MODE_NULL;
+    if (r == ESP_OK) {
+      s_cur_mode = WIFI_MODE_NULL;
+      s_started = false;
+    }
     goto out;
   }
 
@@ -466,7 +468,10 @@ bool mgos_wifi_dev_sta_disconnect(void) {
   if (s_cur_mode == WIFI_MODE_STA) {
     esp_err_t r = esp_wifi_stop();
     if (r == ESP_ERR_WIFI_NOT_INIT) r = ESP_OK; /* Nothing to stop. */
-    if (r == ESP_OK) s_cur_mode = WIFI_MODE_NULL;
+    if (r == ESP_OK) {
+      s_cur_mode = WIFI_MODE_NULL;
+      s_started = false;
+    }
   }
   return true;
 }
@@ -498,11 +503,15 @@ void mgos_wifi_dev_init(void) {
 }
 
 void mgos_wifi_dev_deinit(void) {
-  if (s_cur_mode != WIFI_MODE_NULL) {
+  if (s_started) {
     esp_wifi_stop();
-    esp_wifi_deinit();
-    s_cur_mode = WIFI_MODE_NULL;
+    s_started = false;
   }
+  if (s_inited) {
+    esp_wifi_deinit();
+    s_inited = false;
+  }
+  s_cur_mode = WIFI_MODE_NULL;
 }
 
 char *mgos_wifi_get_sta_default_dns() {

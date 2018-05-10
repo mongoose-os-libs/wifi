@@ -49,7 +49,7 @@ static bool s_sta_should_reconnect = false;
 
 struct mgos_rlock_type *s_wifi_lock = NULL;
 
-static int s_cur_sta_cfg_idx = 0;
+static int s_cur_sta_cfg_idx = -1;
 static struct mgos_config_wifi *s_cur_cfg = NULL;
 static mgos_timer_id s_connect_timer_id = MGOS_INVALID_TIMER_ID;
 
@@ -297,6 +297,7 @@ bool mgos_wifi_connect(void) {
 }
 
 bool mgos_wifi_disconnect(void) {
+  if (s_cur_sta_cfg_idx < 0) return false;  // Not inited.
   wifi_lock();
   s_sta_should_reconnect = false;
   bool ret = mgos_wifi_dev_sta_disconnect();
@@ -498,6 +499,8 @@ bool mgos_wifi_init(void) {
         mg_bind(mgos_get_mgr(), buf, dns_ev_handler, 0);
     mg_set_protocol_dns(dns_conn);
   }
+
+  s_cur_sta_cfg_idx = 0;
 
   return true;
 }
