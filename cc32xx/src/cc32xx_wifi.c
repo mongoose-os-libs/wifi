@@ -70,6 +70,9 @@
 #define SL_WLAN_SECURITY_TYPE_BITMAP_WPA SL_SCAN_SEC_TYPE_WPA
 #define SL_WLAN_SECURITY_TYPE_BITMAP_WPA2 SL_SCAN_SEC_TYPE_WPA2
 
+#define SL_WLAN_GENERAL_PARAM_OPT_COUNTRY_CODE \
+  WLAN_GENERAL_PARAM_OPT_COUNTRY_CODE
+
 #define SlWlanNetworkEntry_t Sl_WlanNetworkEntry_t
 #define SlWlanGetRxStatResponse_t SlGetRxStatResponse_t
 
@@ -103,6 +106,10 @@ static bool restart_nwp(SlWlanMode_e role) {
 #if CS_PLATFORM == CS_P_CC3200
   cc32xx_vfs_dev_slfs_container_flush_all();
 #endif
+  /* Enable channels 12-14 */
+  const _u8 *val = "JP";
+  sl_WlanSet(SL_WLAN_CFG_GENERAL_PARAM_ID,
+             SL_WLAN_GENERAL_PARAM_OPT_COUNTRY_CODE, 2, val);
   if (sl_WlanSetMode(role) != 0) return false;
   /* Without a delay in sl_Stop subsequent sl_Start gets stuck sometimes. */
   sl_Stop(10);
