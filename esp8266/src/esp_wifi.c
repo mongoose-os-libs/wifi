@@ -179,6 +179,9 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     return false;
   }
 
+  wifi_station_set_auto_connect(0);
+  wifi_station_set_reconnect_policy(0); /* We manage reconnect ourselves */
+
   if (!mgos_conf_str_empty(cfg->cert) || !mgos_conf_str_empty(cfg->user)) {
     /* WPA-enterprise mode */
     static char *s_ca_cert_pem = NULL, *s_cert_pem = NULL, *s_key_pem = NULL;
