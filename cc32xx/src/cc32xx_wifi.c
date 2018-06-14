@@ -28,7 +28,9 @@
 #include "mgos_sys_config.h"
 #include "mgos_wifi_hal.h"
 
-#include "cc32xx_vfs_dev_slfs_container.h"
+#if CS_PLATFORM == CS_P_CC3200
+#include "cc3200_vfs_dev_slfs_container.h"
+#endif
 
 #ifndef WIFI_SCAN_INTERVAL_SECONDS
 #define WIFI_SCAN_INTERVAL_SECONDS 15
@@ -104,7 +106,7 @@ static bool restart_nwp(SlWlanMode_e role) {
    */
   mgos_lock();
 #if CS_PLATFORM == CS_P_CC3200
-  cc32xx_vfs_dev_slfs_container_flush_all();
+  cc3200_vfs_dev_slfs_container_flush_all();
 #endif
   /* Enable channels 12-14 */
   const _u8 *val = "JP";
