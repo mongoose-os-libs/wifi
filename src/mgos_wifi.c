@@ -30,6 +30,7 @@
 #include "mgos_sys_config.h"
 #include "mgos_system.h"
 #include "mgos_timers.h"
+#include "mgos_event.h"
 
 #include "mongoose.h"
 
@@ -150,6 +151,14 @@ static void mgos_wifi_on_change_cb(void *arg) {
   if (reconnect && s_sta_should_reconnect) {
     mgos_wifi_connect();
   }
+}
+
+void mgos_wifi_dev_ap_on_change_cb(enum mgos_wifi_event ev){
+  // struct mgos_wifi_ap_sta_connected_arg evd = {
+  //     //
+  // };
+  // mgos_event_trigger(ev, &evd);
+  mgos_event_trigger(ev, NULL); // not sure correct way to pass ev info from platform specific files
 }
 
 void mgos_wifi_dev_on_change_cb(enum mgos_net_event ev) {
@@ -480,6 +489,11 @@ static void dns_ev_handler(struct mg_connection *c, int ev, void *ev_data,
 }
 
 bool mgos_wifi_init(void) {
+
+  if (!mgos_event_register_base(MGOS_WIFI_EV_BASE, "wfi")) {
+    // return MGOS_INIT_NET_INIT_FAILED; // Should we trigger NET init event failed?? Or add a new one in mgos_init.h for wifi?
+  }
+
   s_wifi_lock = mgos_rlock_create();
   mgos_register_config_validator(validate_wifi_cfg);
   mgos_wifi_dev_init();

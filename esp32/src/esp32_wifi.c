@@ -39,7 +39,9 @@ static wifi_mode_t s_cur_mode = WIFI_MODE_NULL;
 
 esp_err_t esp32_wifi_ev(system_event_t *ev) {
   bool send_ev = false;
+  bool send_wifi_ev = false;
   enum mgos_net_event mg_ev;
+  enum mgos_wifi_event wifi_ev;
   system_event_info_t *info = &ev->event_info;
   switch (ev->event_id) {
     case SYSTEM_EVENT_STA_START: {
@@ -64,6 +66,8 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
       send_ev = true;
       break;
     case SYSTEM_EVENT_AP_STACONNECTED: {
+      wifi_ev = MGOS_WIFI_AP_STA_CONNECTED;
+      send_wifi_ev = true;
       const uint8_t *mac = ev->event_info.sta_connected.mac;
       LOG(LL_INFO, ("WiFi AP: station %02X%02X%02X%02X%02X%02X (aid %d) %s",
                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
@@ -71,6 +75,8 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
       break;
     }
     case SYSTEM_EVENT_AP_STADISCONNECTED: {
+      wifi_ev = MGOS_WIFI_AP_STA_DISCONNECTED;
+      send_wifi_ev = true;
       const uint8_t *mac = ev->event_info.sta_disconnected.mac;
       LOG(LL_INFO, ("WiFi AP: station %02X%02X%02X%02X%02X%02X (aid %d) %s",
                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
@@ -111,6 +117,10 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
 
   if (send_ev) {
     mgos_wifi_dev_on_change_cb(mg_ev);
+  }
+
+  if (send_wifi_ev) {
+    mgos_wifi_dev_ap_on_change_cb(wifi_ev);
   }
 
   return ESP_OK;
