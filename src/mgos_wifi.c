@@ -561,6 +561,9 @@ static void dns_ev_handler(struct mg_connection *c, int ev, void *ev_data,
 }
 
 bool mgos_wifi_init(void) {
+  // register the wifi events
+  mgos_event_register_base(MGOS_WIFI_EV_BASE, "wifi");
+
   s_wifi_lock = mgos_rlock_create();
   mgos_register_config_validator(validate_wifi_cfg);
   mgos_wifi_dev_init();
