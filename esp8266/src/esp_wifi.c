@@ -39,6 +39,13 @@
 
 static uint8_t s_cur_mode = NULL_MODE;
 
+static struct mgos_wifi_ap_clients s_ap_clients = {.num_clients = 0,
+  .client = NULL};
+
+const struct mgos_wifi_ap_clients *mgos_wifi_ap_get_clients() {
+  return &s_ap_clients;
+}
+
 void wifi_changed_cb(System_Event_t *evt) {
   bool send_ev = false;
   enum mgos_net_event mg_ev;
@@ -59,8 +66,30 @@ void wifi_changed_cb(System_Event_t *evt) {
       mg_ev = MGOS_NET_EV_IP_ACQUIRED;
       send_ev = true;
       break;
-    case EVENT_SOFTAPMODE_STACONNECTED:
-    case EVENT_SOFTAPMODE_STADISCONNECTED:
+    case EVENT_SOFTAPMODE_STACONNECTED: {
+      const uint8_t *mac = evt->event_info.sta_connected.mac;
+      LOG(LL_INFO, ("WiFi AP: station %02X%02X%02X%02X%02X%02X (aid %d) %s",
+          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+          evt->event_info.sta_connected.aid, "connected"));
+      // add the new mac
+      struct mgos_wifi_ap_sta_connected_arg *new_client =
+        mgos_wifi_dev_ap_add_client(&s_ap_clients, mac);
+      mgos_wifi_dev_ap_trigger_event(MGOS_WIFI_AP_STA_CONNECTED, new_client);
+      break;
+    }
+    case EVENT_SOFTAPMODE_STADISCONNECTED: {
+      const uint8_t *mac = evt->event_info.sta_disconnected.mac;
+      LOG(LL_INFO, ("WiFi AP: station %02X%02X%02X%02X%02X%02X (aid %d) %s",
+          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+          evt->event_info.sta_disconnected.aid, "disconnected"));
+      int index = mgos_wifi_dev_ap_get_client(&s_ap_clients, mac);
+      if (index >= 0) {
+        mgos_wifi_dev_ap_trigger_event(MGOS_WIFI_AP_STA_DISCONNECTED,
+                                       s_ap_clients.client + index);
+        mgos_wifi_dev_ap_remove_client(&s_ap_clients, index);
+      }
+      break;
+    }
     case EVENT_SOFTAPMODE_PROBEREQRECVED:
     case EVENT_STAMODE_AUTHMODE_CHANGE:
     case EVENT_STAMODE_DHCP_TIMEOUT:

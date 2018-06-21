@@ -156,6 +156,86 @@ void mgos_wifi_dev_on_change_cb(enum mgos_net_event ev) {
   mgos_invoke_cb(mgos_wifi_on_change_cb, (void *) ev, false /* from_isr */);
 }
 
+
+
+struct wifi_ap_event_arg {
+  enum mgos_wifi_event ev;
+  struct mgos_wifi_ap_sta_connected_arg ev_data;
+};
+
+static void ap_trigger_event_cb(void *cb_arg) {
+  struct wifi_ap_event_arg *arg = (struct wifi_ap_event_arg *) cb_arg;
+  mgos_event_trigger(arg->ev, &arg->ev_data);
+  free(arg);
+}
+
+void mgos_wifi_dev_ap_trigger_event(enum mgos_wifi_event ev,
+                                    const struct mgos_wifi_ap_sta_connected_arg*
+                                    ev_data) {
+  size_t size_of_arg = sizeof (struct wifi_ap_event_arg);
+  struct wifi_ap_event_arg *arg =
+    (struct wifi_ap_event_arg *) calloc(1, size_of_arg);
+  arg->ev = ev;
+  const size_t size_of_ev_data = sizeof (*ev_data);
+  memcpy(&arg->ev_data, ev_data, size_of_ev_data);
+  mgos_invoke_cb(ap_trigger_event_cb, arg, false /* from_isr */);
+}
+
+struct mgos_wifi_ap_sta_connected_arg*
+mgos_wifi_dev_ap_add_client(struct mgos_wifi_ap_clients *clients,
+                            const uint8_t *mac) {
+  size_t new_size = (clients->num_clients + 1) * sizeof (clients->client[0]);
+  clients->client =
+    (struct mgos_wifi_ap_sta_connected_arg *) realloc(clients->client, new_size);
+  struct mgos_wifi_ap_sta_connected_arg *new_client =
+    clients->client + clients->num_clients;
+  memcpy(new_client->mac, mac, sizeof (new_client->mac));
+  clients->num_clients++;
+  return new_client;
+}
+
+int mgos_wifi_dev_ap_get_client(struct mgos_wifi_ap_clients *clients,
+                                const uint8_t *mac) {
+  int index;
+  bool found = false;
+  struct mgos_wifi_ap_sta_connected_arg *client = clients->client;
+  if (NULL == client) {
+    return -1;
+  }
+  for (index = 0; index < clients->num_clients; ++index, ++client) {
+    found = 0 == memcmp(client->mac, mac, 6);
+    if (found) {
+      break;
+    }
+  }
+  return found ? index : -1;
+}
+
+bool mgos_wifi_dev_ap_remove_client(struct mgos_wifi_ap_clients *clients,
+                                    int index) {
+  if (index < 0) {
+    return false;
+  }
+  // index = 0 and num_clients = 1
+  if ((0 == index) && (1 == clients->num_clients)) {
+    clients->num_clients = 0;
+    free(clients->client);
+    clients->client = NULL;
+    return true;
+  }
+  // remove the client
+  int new_num_clients = clients->num_clients - 1;
+  size_t size_to_move = (new_num_clients - index) * sizeof (clients->client[0]);
+  if (0 != size_to_move) {
+    memmove(&clients->client[index], &clients->client[index + 1], size_to_move);
+  }
+  size_t new_size = new_num_clients * sizeof (clients->client[0]);
+  clients->client =
+    (struct mgos_wifi_ap_sta_connected_arg*) realloc(clients->client, new_size);
+  clients->num_clients--;
+  return true;
+}
+
 void mgos_wifi_add_on_change_cb(mgos_wifi_changed_t cb, void *arg) {
   struct cb_info *e = (struct cb_info *) calloc(1, sizeof(*e));
   if (e == NULL) return;
