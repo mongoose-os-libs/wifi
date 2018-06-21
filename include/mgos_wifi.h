@@ -20,6 +20,7 @@
 
 #include <stdbool.h>
 #include "mgos_sys_config.h"
+#include "mgos_event.h"
 
 #ifdef __cplusplus
 extern "C" {
