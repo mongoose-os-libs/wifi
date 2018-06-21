@@ -94,6 +94,7 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
         mgos_wifi_dev_ap_trigger_event(MGOS_WIFI_AP_STA_DISCONNECTED,
                                        s_ap_clients.client + index);
         mgos_wifi_dev_ap_remove_client(&s_ap_clients, index);
+      }
       break;
     }
     case SYSTEM_EVENT_SCAN_DONE: {
