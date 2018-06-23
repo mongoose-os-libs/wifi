@@ -20,10 +20,38 @@
 
 #include <stdbool.h>
 #include "mgos_sys_config.h"
+#include "mgos_event.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
+
+#define MGOS_WIFI_EV_BASE MGOS_EVENT_BASE('W', 'F', 'I')
+
+/*
+ * Event types which are delivered to the callback registered with
+ * `mgos_event_add_handler()` or `mgos_event_add_group_handler()`, see
+ * example in the documentation for `MGOS_EVENT_GRP_NET`.
+ */
+enum mgos_wifi_event {
+  MGOS_WIFI_AP_STA_CONNECTED =
+  MGOS_WIFI_EV_BASE, // struct mgos_wifi_ap_sta_connected_arg*
+  MGOS_WIFI_AP_STA_DISCONNECTED, // struct mgos_wifi_ap_sta_connected_arg*
+};
+
+struct mgos_wifi_ap_sta_connected_arg {
+  uint8_t mac[6];
+};
+
+struct mgos_wifi_ap_clients {
+  int num_clients;
+  struct mgos_wifi_ap_sta_connected_arg *client;
+};
+
+/*
+ * Return the list of connected clients
+ */
+const struct mgos_wifi_ap_clients *mgos_wifi_ap_get_clients();
 
 /*
  * Setup wifi station; `struct mgos_config_wifi_sta` looks as follows:

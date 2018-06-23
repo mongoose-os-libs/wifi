@@ -40,6 +40,13 @@ static bool s_started = false;
 static wifi_mode_t s_cur_mode = WIFI_MODE_NULL;
 typedef esp_err_t (*wifi_func_t)(void *arg);
 
+static struct mgos_wifi_ap_clients s_ap_clients = {.num_clients = 0,
+  .client = NULL};
+
+const struct mgos_wifi_ap_clients *mgos_wifi_ap_get_clients() {
+  return &s_ap_clients;
+}
+
 esp_err_t esp32_wifi_ev(system_event_t *ev) {
   bool send_ev = false;
   enum mgos_net_event mg_ev;
@@ -71,6 +78,10 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
       LOG(LL_INFO, ("WiFi AP: station %02X%02X%02X%02X%02X%02X (aid %d) %s",
                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
                     info->sta_connected.aid, "connected"));
+      // add the new mac
+      struct mgos_wifi_ap_sta_connected_arg *new_client =
+        mgos_wifi_dev_ap_add_client(&s_ap_clients, mac);
+      mgos_wifi_dev_ap_trigger_event(MGOS_WIFI_AP_STA_CONNECTED, new_client);
       break;
     }
     case SYSTEM_EVENT_AP_STADISCONNECTED: {
@@ -78,6 +89,12 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
       LOG(LL_INFO, ("WiFi AP: station %02X%02X%02X%02X%02X%02X (aid %d) %s",
                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
                     info->sta_disconnected.aid, "disconnected"));
+      int index = mgos_wifi_dev_ap_get_client(&s_ap_clients, mac);
+      if (index >= 0) {
+        mgos_wifi_dev_ap_trigger_event(MGOS_WIFI_AP_STA_DISCONNECTED,
+                                       s_ap_clients.client + index);
+        mgos_wifi_dev_ap_remove_client(&s_ap_clients, index);
+      }
       break;
     }
     case SYSTEM_EVENT_SCAN_DONE: {

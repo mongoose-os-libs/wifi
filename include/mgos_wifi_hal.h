@@ -42,6 +42,26 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
 /* Invoke this when Wifi connection state changes. */
 void mgos_wifi_dev_on_change_cb(enum mgos_net_event ev);
 
+
+/* Invoke this when Wifi connection state changes. */
+void mgos_wifi_dev_on_change_cb(enum mgos_net_event ev);
+
+/* Invoke this when Wifi AP connection state changes. */
+void mgos_wifi_dev_ap_trigger_event(enum mgos_wifi_event ev,
+                                    const struct mgos_wifi_ap_sta_connected_arg*
+                                    ev_data);
+
+/* helper functions to handle ap clients*/
+struct mgos_wifi_ap_sta_connected_arg*
+mgos_wifi_dev_ap_add_client(
+                            struct mgos_wifi_ap_clients *clients,
+                            const uint8_t *mac);
+int mgos_wifi_dev_ap_get_client(struct mgos_wifi_ap_clients *clients,
+                                const uint8_t *mac);
+bool mgos_wifi_dev_ap_remove_client(struct mgos_wifi_ap_clients *clients,
+                                    int index);
+
+
 bool mgos_wifi_dev_start_scan(void);
 /*
  * Invoke this when the scan is done. In case of error, pass num_res < 0.
