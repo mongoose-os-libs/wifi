@@ -178,6 +178,12 @@ char *mgos_wifi_get_sta_default_dns(void);
 int mgos_wifi_sta_get_rssi(void);
 
 /*
+ * Returns signal strength of station if connected to an AP, otherwise 0.
+ * Note: strength is returned as a percentage (without % symbol), out of 100
+ */
+int mgos_wifi_sta_get_signal_strength(void);
+
+/*
  * Auth mode for networks obtained with `mgos_wifi_scan()`.
  */
 enum mgos_wifi_auth_mode {
