@@ -101,39 +101,6 @@ bool mgos_wifi_disconnect(void);
 #define MGOS_NET_IF_WIFI_AP 1
 
 /*
- * DEPRECATED: use `mgos_net_*` API instead.
- * Check for events with if_type == MGOS_NET_IF_TYPE_WIFI
- * and if_instance == MGOS_NET_IF_WIFI_STA or MGOS_NET_IF_WIFI_AP
- */
-enum mgos_wifi_status {
-  MGOS_WIFI_DISCONNECTED = 0,
-  MGOS_WIFI_CONNECTING = 1,
-  MGOS_WIFI_CONNECTED = 2,
-  MGOS_WIFI_IP_ACQUIRED = 3,
-};
-
-/*
- * DEPRECATED: use `mgos_net_*` API instead.
- *
- * Callback signature for `mgos_wifi_add_on_change_cb()`.
- */
-typedef void (*mgos_wifi_changed_t)(enum mgos_wifi_status event, void *arg);
-
-/*
- * DEPRECATED: use `mgos_net_*` API instead.
- *
- * Add a callback to be invoked when WiFi state changes.
- */
-void mgos_wifi_add_on_change_cb(mgos_wifi_changed_t fn, void *arg);
-
-/*
- * DEPRECATED: use `mgos_net_*` API instead.
- *
- * Remove a previously added callback, fn and arg have to match exactly.
- */
-void mgos_wifi_remove_on_change_cb(mgos_wifi_changed_t fn, void *arg);
-
-/*
  * Check whether the wifi access point config `cfg` is valid; if it is, `true`
  * is returned; otherwise `false` is returned and error message is written
  * to `*msg`. The caller should free `*msg`.

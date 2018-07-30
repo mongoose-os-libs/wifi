@@ -40,9 +40,15 @@ struct cb_info {
   void *arg;
   SLIST_ENTRY(cb_info) next;
 };
-static SLIST_HEAD(s_wifi_cbs, cb_info) s_wifi_cbs;
 static SLIST_HEAD(s_scan_cbs, cb_info) s_scan_cbs;
 static bool s_scan_in_progress = false;
+
+enum mgos_wifi_status {
+  MGOS_WIFI_DISCONNECTED = 0,
+  MGOS_WIFI_CONNECTING = 1,
+  MGOS_WIFI_CONNECTED = 2,
+  MGOS_WIFI_IP_ACQUIRED = 3,
+};
 
 enum mgos_wifi_status s_sta_status = MGOS_WIFI_DISCONNECTED;
 static bool s_sta_should_reconnect = false;
@@ -137,16 +143,6 @@ static void mgos_wifi_on_change_cb(void *arg) {
 
   mgos_net_dev_event_cb(MGOS_NET_IF_TYPE_WIFI, MGOS_NET_IF_WIFI_STA, ev);
 
-  struct cb_info *e, *te;
-  wifi_lock();
-  enum mgos_wifi_status ws = s_sta_status;
-  SLIST_FOREACH_SAFE(e, &s_wifi_cbs, next, te) {
-    wifi_unlock();
-    ((mgos_wifi_changed_t) e->cb)(ws, e->arg);
-    wifi_lock();
-  }
-  wifi_unlock();
-
   if (reconnect && s_sta_should_reconnect) {
     mgos_wifi_connect();
   }
@@ -154,24 +150,6 @@ static void mgos_wifi_on_change_cb(void *arg) {
 
 void mgos_wifi_dev_on_change_cb(enum mgos_net_event ev) {
   mgos_invoke_cb(mgos_wifi_on_change_cb, (void *) ev, false /* from_isr */);
-}
-
-void mgos_wifi_add_on_change_cb(mgos_wifi_changed_t cb, void *arg) {
-  struct cb_info *e = (struct cb_info *) calloc(1, sizeof(*e));
-  if (e == NULL) return;
-  e->cb = cb;
-  e->arg = arg;
-  SLIST_INSERT_HEAD(&s_wifi_cbs, e, next);
-}
-
-void mgos_wifi_remove_on_change_cb(mgos_wifi_changed_t cb, void *arg) {
-  struct cb_info *e;
-  SLIST_FOREACH(e, &s_wifi_cbs, next) {
-    if (e->cb == cb && e->arg == arg) {
-      SLIST_REMOVE(&s_wifi_cbs, e, cb_info, next);
-      return;
-    }
-  }
 }
 
 bool mgos_wifi_validate_sta_cfg(const struct mgos_config_wifi_sta *cfg,
