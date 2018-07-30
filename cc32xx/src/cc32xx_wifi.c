@@ -59,7 +59,10 @@
 #define SL_WLAN_AP_OPT_PASSWORD WLAN_AP_OPT_PASSWORD
 #define SL_WLAN_AP_OPT_MAX_STATIONS WLAN_AP_OPT_MAX_STATIONS
 
+#define SL_WLAN_POLICY_PM SL_POLICY_PM
 #define SL_WLAN_POLICY_SCAN SL_POLICY_SCAN
+
+#define SL_WLAN_ALWAYS_ON_POLICY SL_ALWAYS_ON_POLICY
 
 #define SL_WLAN_SEC_TYPE_OPEN SL_SEC_TYPE_OPEN
 #define SL_WLAN_SEC_TYPE_WEP SL_SEC_TYPE_WEP
@@ -119,6 +122,11 @@ static bool restart_nwp(SlWlanMode_e role) {
   mgos_unlock();
   /* We don't need TI's web server. */
   sl_NetAppStop(SL_NETAPP_HTTP_SERVER_ID);
+  /*
+   * Reportedly CC3200 NWP goes haywire when trying to do PM, so disable it.
+   * TODO(rojer): Check if it still applies to CC3220.
+   */
+  sl_WlanPolicySet(SL_WLAN_POLICY_PM, SL_WLAN_ALWAYS_ON_POLICY, NULL, 0);
   sl_restart_cb(mgos_get_mgr());
   return (s_current_role >= 0);
 }
