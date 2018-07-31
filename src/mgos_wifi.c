@@ -43,13 +43,6 @@ struct cb_info {
 static SLIST_HEAD(s_scan_cbs, cb_info) s_scan_cbs;
 static bool s_scan_in_progress = false;
 
-enum mgos_wifi_status {
-  MGOS_WIFI_DISCONNECTED = 0,
-  MGOS_WIFI_CONNECTING = 1,
-  MGOS_WIFI_CONNECTED = 2,
-  MGOS_WIFI_IP_ACQUIRED = 3,
-};
-
 enum mgos_wifi_status s_sta_status = MGOS_WIFI_DISCONNECTED;
 static bool s_sta_should_reconnect = false;
 
@@ -278,7 +271,10 @@ bool mgos_wifi_disconnect(void) {
   if (s_cur_sta_cfg_idx < 0) return false;  // Not inited.
   wifi_lock();
   s_sta_should_reconnect = false;
-  bool ret = mgos_wifi_dev_sta_disconnect();
+  bool ret = true;
+  if (s_sta_status != MGOS_WIFI_DISCONNECTED) {
+    ret = mgos_wifi_dev_sta_disconnect();
+  }
   if (ret) {
     mgos_clear_timer(s_connect_timer_id);
     s_connect_timer_id = MGOS_INVALID_TIMER_ID;

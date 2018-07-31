@@ -116,6 +116,13 @@ bool mgos_wifi_validate_ap_cfg(const struct mgos_config_wifi_ap *cfg,
 bool mgos_wifi_validate_sta_cfg(const struct mgos_config_wifi_sta *cfg,
                                 char **msg);
 
+enum mgos_wifi_status {
+  MGOS_WIFI_DISCONNECTED = 0,
+  MGOS_WIFI_CONNECTING = 1,
+  MGOS_WIFI_CONNECTED = 2,
+  MGOS_WIFI_IP_ACQUIRED = 3,
+};
+
 /*
  * Get wifi status, see `enum mgos_wifi_status`.
  */

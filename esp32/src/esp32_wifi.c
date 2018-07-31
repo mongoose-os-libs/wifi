@@ -454,6 +454,7 @@ out:
 }
 
 bool mgos_wifi_dev_sta_connect(void) {
+  if (s_cur_mode == WIFI_MODE_NULL || s_cur_mode == WIFI_MODE_AP) return false;
   esp_err_t r =
       wifi_ensure_init_and_start((wifi_func_t) esp_wifi_connect, NULL);
   if (r != ESP_OK) {
@@ -463,6 +464,7 @@ bool mgos_wifi_dev_sta_connect(void) {
 }
 
 bool mgos_wifi_dev_sta_disconnect(void) {
+  if (s_cur_mode == WIFI_MODE_NULL || s_cur_mode == WIFI_MODE_AP) return false;
   esp_wifi_disconnect();
   /* If we are in station-only mode, stop WiFi task as well. */
   if (s_cur_mode == WIFI_MODE_STA) {
