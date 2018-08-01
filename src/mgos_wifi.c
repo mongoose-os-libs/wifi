@@ -98,28 +98,41 @@ static int mgos_wifi_get_next_sta_cfg_idx(const struct mgos_config_wifi *cfg,
 
 static void mgos_wifi_sta_connect_timeout_timer_cb(void *arg);
 
+struct mgos_wifi_event_internal {
+  enum mgos_wifi_event ev;
+  union {
+    struct mgos_wifi_ap_sta_connected_arg sta_connected;
+    struct mgos_wifi_ap_sta_disconnected_arg sta_disconnected;
+  } arg;
+};
+
 static void mgos_wifi_on_change_cb(void *arg) {
-  bool reconnect = false;
-  enum mgos_net_event ev = (enum mgos_net_event)(intptr_t) arg;
-  switch (ev) {
-    case MGOS_NET_EV_DISCONNECTED: {
+  bool reconnect = false, net_event = true;
+  struct mgos_wifi_event_internal *ei = (struct mgos_wifi_event_internal *) arg;
+  void *ev_arg = NULL;
+  enum mgos_net_event nev = MGOS_NET_EV_DISCONNECTED;
+  switch (ei->ev) {
+    case MGOS_WIFI_EV_STA_DISCONNECTED: {
       if ((s_sta_status == MGOS_WIFI_CONNECTED ||
            s_sta_status == MGOS_WIFI_IP_ACQUIRED) &&
           s_sta_should_reconnect) {
         reconnect = s_sta_should_reconnect;
       }
       s_sta_status = MGOS_WIFI_DISCONNECTED;
+      nev = MGOS_NET_EV_DISCONNECTED;
       break;
     }
-    case MGOS_NET_EV_CONNECTING: {
+    case MGOS_WIFI_EV_STA_CONNECTING: {
       s_sta_status = MGOS_WIFI_CONNECTING;
+      nev = MGOS_NET_EV_CONNECTING;
       break;
     }
-    case MGOS_NET_EV_CONNECTED: {
+    case MGOS_WIFI_EV_STA_CONNECTED: {
       s_sta_status = MGOS_WIFI_CONNECTED;
+      nev = MGOS_NET_EV_CONNECTED;
       break;
     }
-    case MGOS_NET_EV_IP_ACQUIRED: {
+    case MGOS_WIFI_EV_STA_IP_ACQUIRED: {
       s_sta_status = MGOS_WIFI_IP_ACQUIRED;
       mgos_clear_timer(s_connect_timer_id);
       s_connect_timer_id = MGOS_INVALID_TIMER_ID;
@@ -130,19 +143,40 @@ static void mgos_wifi_on_change_cb(void *arg) {
           save_cfg(&mgos_sys_config, NULL);
         }
       }
+      nev = MGOS_NET_EV_IP_ACQUIRED;
+      break;
+    }
+    case MGOS_WIFI_EV_AP_STA_CONNECTED:
+    case MGOS_WIFI_EV_AP_STA_DISCONNECTED: {
+      net_event = false;
+      ev_arg = &ei->arg;
       break;
     }
   }
 
-  mgos_net_dev_event_cb(MGOS_NET_IF_TYPE_WIFI, MGOS_NET_IF_WIFI_STA, ev);
+  mgos_event_trigger(ei->ev, ev_arg);
+
+  if (net_event) {
+    mgos_net_dev_event_cb(MGOS_NET_IF_TYPE_WIFI, MGOS_NET_IF_WIFI_STA, nev);
+  }
+
+  free(ei);
 
   if (reconnect && s_sta_should_reconnect) {
     mgos_wifi_connect();
   }
 }
 
-void mgos_wifi_dev_on_change_cb(enum mgos_net_event ev) {
-  mgos_invoke_cb(mgos_wifi_on_change_cb, (void *) ev, false /* from_isr */);
+void mgos_wifi_dev_on_change_cb(enum mgos_wifi_event ev, void *arg) {
+  struct mgos_wifi_event_internal *ei =
+      (struct mgos_wifi_event_internal *) calloc(1, sizeof(*ei));
+  if (ei == NULL) return;
+  ei->ev = ev;
+  if (arg != NULL) {
+    memcpy(&ei->arg, arg,
+           sizeof(ei->arg)); /* This may overshoot a bit. It's ok. */
+  }
+  mgos_invoke_cb(mgos_wifi_on_change_cb, ei, false /* from_isr */);
 }
 
 bool mgos_wifi_validate_sta_cfg(const struct mgos_config_wifi_sta *cfg,
@@ -255,7 +289,7 @@ bool mgos_wifi_connect(void) {
   bool ret = mgos_wifi_dev_sta_connect();
   s_sta_should_reconnect = ret;
   if (ret) {
-    mgos_wifi_dev_on_change_cb(MGOS_NET_EV_CONNECTING);
+    mgos_wifi_dev_on_change_cb(MGOS_WIFI_EV_STA_CONNECTING, NULL);
     if (s_cur_cfg != NULL && s_cur_cfg->sta_connect_timeout > 0 &&
         s_connect_timer_id == MGOS_INVALID_TIMER_ID) {
       s_connect_timer_id =
@@ -456,6 +490,7 @@ static void dns_ev_handler(struct mg_connection *c, int ev, void *ev_data,
 
 bool mgos_wifi_init(void) {
   s_wifi_lock = mgos_rlock_create();
+  mgos_event_register_base(MGOS_WIFI_EV_BASE, "wifi");
   mgos_register_config_validator(validate_wifi_cfg);
   mgos_wifi_dev_init();
   bool ret =

@@ -41,8 +41,11 @@ static wifi_mode_t s_cur_mode = WIFI_MODE_NULL;
 typedef esp_err_t (*wifi_func_t)(void *arg);
 
 esp_err_t esp32_wifi_ev(system_event_t *ev) {
-  bool send_ev = false;
-  enum mgos_net_event mg_ev;
+  bool send_mg_ev = false;
+  enum mgos_wifi_event mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
+  void *mg_ev_arg = NULL;
+  struct mgos_wifi_ap_sta_connected_arg sta_connected;
+  struct mgos_wifi_ap_sta_disconnected_arg sta_disconnected;
   system_event_info_t *info = &ev->event_info;
   switch (ev->event_id) {
     case SYSTEM_EVENT_STA_START: {
@@ -55,29 +58,33 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
       LOG(LL_INFO, ("Disconnected from %.*s, reason: %d",
                     (int) info->disconnected.ssid_len, info->disconnected.ssid,
                     info->disconnected.reason));
-      mg_ev = MGOS_NET_EV_DISCONNECTED;
-      send_ev = true;
+      mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
+      send_mg_ev = true;
       break;
     case SYSTEM_EVENT_STA_CONNECTED:
-      mg_ev = MGOS_NET_EV_CONNECTED;
-      send_ev = true;
+      mg_ev = MGOS_WIFI_EV_STA_CONNECTED;
+      send_mg_ev = true;
       break;
     case SYSTEM_EVENT_STA_GOT_IP:
-      mg_ev = MGOS_NET_EV_IP_ACQUIRED;
-      send_ev = true;
+      mg_ev = MGOS_WIFI_EV_STA_IP_ACQUIRED;
+      send_mg_ev = true;
       break;
     case SYSTEM_EVENT_AP_STACONNECTED: {
-      const uint8_t *mac = ev->event_info.sta_connected.mac;
-      LOG(LL_INFO, ("WiFi AP: station %02X%02X%02X%02X%02X%02X (aid %d) %s",
-                    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-                    info->sta_connected.aid, "connected"));
+      memset(&sta_connected, 0, sizeof(sta_connected));
+      memcpy(sta_connected.mac, ev->event_info.sta_connected.mac,
+             sizeof(sta_connected.mac));
+      mg_ev = MGOS_WIFI_EV_AP_STA_CONNECTED;
+      mg_ev_arg = &sta_connected;
+      send_mg_ev = true;
       break;
     }
     case SYSTEM_EVENT_AP_STADISCONNECTED: {
-      const uint8_t *mac = ev->event_info.sta_disconnected.mac;
-      LOG(LL_INFO, ("WiFi AP: station %02X%02X%02X%02X%02X%02X (aid %d) %s",
-                    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-                    info->sta_disconnected.aid, "disconnected"));
+      memset(&sta_disconnected, 0, sizeof(sta_disconnected));
+      memcpy(sta_disconnected.mac, ev->event_info.sta_disconnected.mac,
+             sizeof(sta_disconnected.mac));
+      mg_ev = MGOS_WIFI_EV_AP_STA_DISCONNECTED;
+      mg_ev_arg = &sta_disconnected;
+      send_mg_ev = true;
       break;
     }
     case SYSTEM_EVENT_SCAN_DONE: {
@@ -109,11 +116,12 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
       mgos_wifi_dev_scan_cb(num_res, res);
       break;
     }
-    default: { LOG(LL_DEBUG, ("WiFi event: %d", ev->event_id)); }
+    default:
+      break;
   }
 
-  if (send_ev) {
-    mgos_wifi_dev_on_change_cb(mg_ev);
+  if (send_mg_ev) {
+    mgos_wifi_dev_on_change_cb(mg_ev, mg_ev_arg);
   }
 
   return ESP_OK;

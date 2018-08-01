@@ -19,11 +19,38 @@
 #define CS_MOS_LIBS_WIFI_SRC_MGOS_WIFI_H_
 
 #include <stdbool.h>
+#include <stdint.h>
+
+#include "mgos_event.h"
 #include "mgos_sys_config.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
+
+#define MGOS_NET_IF_WIFI_STA 0
+#define MGOS_NET_IF_WIFI_AP 1
+
+#define MGOS_WIFI_EV_BASE MGOS_EVENT_BASE('W', 'F', 'I')
+#define MGOS_EVENT_GRP_WIFI MGOS_WIFI_EV_BASE
+
+/* In the comment, the type of `void *ev_data` is specified */
+enum mgos_wifi_event {
+  MGOS_WIFI_EV_STA_DISCONNECTED = MGOS_WIFI_EV_BASE, /* Arg: NULL */
+  MGOS_WIFI_EV_STA_CONNECTING,                       /* Arg: NULL */
+  MGOS_WIFI_EV_STA_CONNECTED,                        /* Arg: NULL */
+  MGOS_WIFI_EV_STA_IP_ACQUIRED,                      /* Arg: NULL */
+  MGOS_WIFI_EV_AP_STA_CONNECTED,    /* Arg: mgos_wifi_ap_sta_connected_arg */
+  MGOS_WIFI_EV_AP_STA_DISCONNECTED, /* Arg: mgos_wifi_ap_sta_disconnected_arg */
+};
+
+struct mgos_wifi_ap_sta_connected_arg {
+  uint8_t mac[6];
+};
+
+struct mgos_wifi_ap_sta_disconnected_arg {
+  uint8_t mac[6];
+};
 
 /*
  * Setup wifi station; `struct mgos_config_wifi_sta` looks as follows:
@@ -96,9 +123,6 @@ bool mgos_wifi_connect(void);
  * Disconnect from wifi station.
  */
 bool mgos_wifi_disconnect(void);
-
-#define MGOS_NET_IF_WIFI_STA 0
-#define MGOS_NET_IF_WIFI_AP 1
 
 /*
  * Check whether the wifi access point config `cfg` is valid; if it is, `true`

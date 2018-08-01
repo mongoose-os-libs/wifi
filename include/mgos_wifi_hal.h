@@ -40,7 +40,7 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
                                struct mgos_net_ip_info *ip_info);
 
 /* Invoke this when Wifi connection state changes. */
-void mgos_wifi_dev_on_change_cb(enum mgos_net_event ev);
+void mgos_wifi_dev_on_change_cb(enum mgos_wifi_event ev, void *arg);
 
 bool mgos_wifi_dev_start_scan(void);
 /*

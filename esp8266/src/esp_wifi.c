@@ -40,27 +40,44 @@
 static uint8_t s_cur_mode = NULL_MODE;
 
 void wifi_changed_cb(System_Event_t *evt) {
-  bool send_ev = false;
-  enum mgos_net_event mg_ev;
+  bool send_mg_ev = false;
+  enum mgos_wifi_event mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
+  void *mg_ev_arg = NULL;
+  struct mgos_wifi_ap_sta_connected_arg sta_connected;
+  struct mgos_wifi_ap_sta_disconnected_arg sta_disconnected;
 #ifdef RTOS_SDK
   switch (evt->event_id) {
 #else
   switch (evt->event) {
 #endif
     case EVENT_STAMODE_DISCONNECTED:
-      mg_ev = MGOS_NET_EV_DISCONNECTED;
-      send_ev = true;
+      mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
+      send_mg_ev = true;
       break;
     case EVENT_STAMODE_CONNECTED:
-      mg_ev = MGOS_NET_EV_CONNECTED;
-      send_ev = true;
+      mg_ev = MGOS_WIFI_EV_STA_CONNECTED;
+      send_mg_ev = true;
       break;
     case EVENT_STAMODE_GOT_IP:
-      mg_ev = MGOS_NET_EV_IP_ACQUIRED;
-      send_ev = true;
+      mg_ev = MGOS_WIFI_EV_STA_IP_ACQUIRED;
+      send_mg_ev = true;
       break;
     case EVENT_SOFTAPMODE_STACONNECTED:
+      memset(&sta_connected, 0, sizeof(sta_connected));
+      memcpy(sta_connected.mac, evt->event_info.sta_connected.mac,
+             sizeof(sta_connected.mac));
+      mg_ev = MGOS_WIFI_EV_AP_STA_CONNECTED;
+      mg_ev_arg = &sta_connected;
+      send_mg_ev = true;
+      break;
     case EVENT_SOFTAPMODE_STADISCONNECTED:
+      memset(&sta_disconnected, 0, sizeof(sta_disconnected));
+      memcpy(sta_disconnected.mac, evt->event_info.sta_disconnected.mac,
+             sizeof(sta_disconnected.mac));
+      mg_ev = MGOS_WIFI_EV_AP_STA_DISCONNECTED;
+      mg_ev_arg = &sta_disconnected;
+      send_mg_ev = true;
+      break;
     case EVENT_SOFTAPMODE_PROBEREQRECVED:
     case EVENT_STAMODE_AUTHMODE_CHANGE:
     case EVENT_STAMODE_DHCP_TIMEOUT:
@@ -68,13 +85,12 @@ void wifi_changed_cb(System_Event_t *evt) {
     case EVENT_STAMODE_SCAN_DONE:
 #endif
     case EVENT_MAX: {
-      LOG(LL_DEBUG, ("WiFi event: %d", evt->event));
       break;
     }
   }
 
-  if (send_ev) {
-    mgos_wifi_dev_on_change_cb(mg_ev);
+  if (send_mg_ev) {
+    mgos_wifi_dev_on_change_cb(mg_ev, mg_ev_arg);
   }
 }
 
