@@ -451,7 +451,7 @@ void mgos_wifi_dev_deinit(void) {
   wifi_set_opmode_current(NULL_MODE);
 }
 
-char *mgos_wifi_get_sta_default_dns() {
+char *mgos_wifi_get_sta_default_dns(void) {
   char *dns;
   ip_addr_t dns_addr = dns_getserver(0);
   if (dns_addr.addr == 0) {

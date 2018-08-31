@@ -26,7 +26,7 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif /* __cplusplus */
+#endif
 
 #define MGOS_NET_IF_WIFI_STA 0
 #define MGOS_NET_IF_WIFI_AP 1
@@ -238,6 +238,6 @@ void mgos_wifi_scan_js(struct mjs *mjs);
 
 #ifdef __cplusplus
 }
-#endif /* __cplusplus */
+#endif
 
 #endif /* CS_MOS_LIBS_WIFI_SRC_MGOS_WIFI_H_ */

@@ -84,7 +84,7 @@ static int mgos_wifi_get_next_sta_cfg_idx(const struct mgos_config_wifi *cfg,
         mgos_wifi_get_sta_cfg(cfg, idx);
     if (sta_cfg && sta_cfg->enable) {
       if (mgos_wifi_validate_sta_cfg(sta_cfg, &msg)) {
-        LOG(LL_INFO, ("WiFi STA: Using config %d", idx));
+        LOG(LL_INFO, ("WiFi STA: Using config %d (%s)", idx, sta_cfg->ssid));
         return idx;
       } else {
         free(msg);
@@ -148,6 +148,13 @@ static void mgos_wifi_on_change_cb(void *arg) {
     }
     case MGOS_WIFI_EV_AP_STA_CONNECTED:
     case MGOS_WIFI_EV_AP_STA_DISCONNECTED: {
+      struct mgos_wifi_ap_sta_connected_arg *ea =
+          (struct mgos_wifi_ap_sta_connected_arg *) &ei->arg;
+      LOG(LL_INFO,
+          ("%02x:%02x:%02x:%02x:%02x:%02x %s", ea->mac[0], ea->mac[1],
+           ea->mac[2], ea->mac[3], ea->mac[4], ea->mac[5],
+           (ei->ev == MGOS_WIFI_EV_AP_STA_CONNECTED ? "connected"
+                                                    : "disconnected")));
       net_event = false;
       ev_arg = &ei->arg;
       break;

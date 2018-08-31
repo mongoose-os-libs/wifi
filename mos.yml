@@ -3,8 +3,6 @@ description: WiFi support
 type: lib
 version: 1.0
 
-platforms: [ cc3200, cc3220, esp32, esp8266 ]
-
 sources:
   - src
 includes:
@@ -99,7 +97,3 @@ tags:
   - wifi
 
 manifest_version: 2017-09-29
-
-# Temporary, while root manifest change propagates (2018/03/29).
-libs:
-  - origin: https://github.com/mongoose-os-libs/core
