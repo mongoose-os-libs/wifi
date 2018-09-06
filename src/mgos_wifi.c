@@ -484,9 +484,10 @@ static void dns_ev_handler(struct mg_connection *c, int ev, void *ev_data,
     mg_dns_uncompress_name(msg, &rr->name, rname, sizeof(rname) - 1);
     if (rr->rtype == MG_DNS_A_RECORD &&
         strcmp(rname, mgos_sys_config_get_wifi_ap_hostname()) == 0) {
-      uint32_t ip;
-      if (inet_pton(AF_INET, mgos_sys_config_get_wifi_ap_ip(), &ip)) {
-        mg_dns_reply_record(&reply, rr, NULL, rr->rtype, 10, &ip, 4);
+      struct sockaddr_in ip;
+      if (mgos_net_str_to_ip(mgos_sys_config_get_wifi_ap_ip(), &ip)) {
+        mg_dns_reply_record(&reply, rr, NULL, rr->rtype, 10,
+                            &ip.sin_addr.s_addr, 4);
       }
     }
   }
