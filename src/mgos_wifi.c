@@ -293,16 +293,16 @@ bool mgos_wifi_setup_ap(const struct mgos_config_wifi_ap *cfg) {
 
 bool mgos_wifi_connect(void) {
   wifi_lock();
+  s_sta_should_reconnect = true;
   bool ret = mgos_wifi_dev_sta_connect();
-  s_sta_should_reconnect = ret;
   if (ret) {
     mgos_wifi_dev_on_change_cb(MGOS_WIFI_EV_STA_CONNECTING, NULL);
-    if (s_cur_cfg != NULL && s_cur_cfg->sta_connect_timeout > 0 &&
-        s_connect_timer_id == MGOS_INVALID_TIMER_ID) {
-      s_connect_timer_id =
-          mgos_set_timer(s_cur_cfg->sta_connect_timeout * 1000, 0,
-                         mgos_wifi_sta_connect_timeout_timer_cb, NULL);
-    }
+  }
+  if (s_cur_cfg != NULL && s_cur_cfg->sta_connect_timeout > 0 &&
+      s_connect_timer_id == MGOS_INVALID_TIMER_ID) {
+    s_connect_timer_id =
+        mgos_set_timer(s_cur_cfg->sta_connect_timeout * 1000, 0,
+                       mgos_wifi_sta_connect_timeout_timer_cb, NULL);
   }
   wifi_unlock();
   return ret;
@@ -516,8 +516,6 @@ bool mgos_wifi_init(void) {
         mg_bind(mgos_get_mgr(), buf, dns_ev_handler, 0);
     mg_set_protocol_dns(dns_conn);
   }
-
-  s_cur_sta_cfg_idx = 0;
 
   return true;
 }
