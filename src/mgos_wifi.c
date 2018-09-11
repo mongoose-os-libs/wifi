@@ -44,6 +44,7 @@ static SLIST_HEAD(s_scan_cbs, cb_info) s_scan_cbs;
 static bool s_scan_in_progress = false;
 
 enum mgos_wifi_status s_sta_status = MGOS_WIFI_DISCONNECTED;
+static char *s_sta_ssid = NULL;
 static bool s_sta_should_reconnect = false;
 
 struct mgos_rlock_type *s_wifi_lock = NULL;
@@ -257,6 +258,8 @@ bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
   bool ret = mgos_wifi_dev_sta_setup(cfg);
   if (ret && cfg->enable) {
     LOG(LL_INFO, ("WiFi STA: Connecting to %s", cfg->ssid));
+    free(s_sta_ssid);
+    s_sta_ssid = strdup(cfg->ssid);
     ret = mgos_wifi_connect();
   }
   if (ret) s_cur_cfg = NULL;
@@ -414,6 +417,10 @@ void mgos_wifi_scan(mgos_wifi_scan_cb_t cb, void *arg) {
     }
   }
   wifi_unlock();
+}
+
+char *mgos_wifi_get_connected_ssid(void) {
+  return (s_sta_status == MGOS_WIFI_IP_ACQUIRED ? strdup(s_sta_ssid) : NULL);
 }
 
 bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {

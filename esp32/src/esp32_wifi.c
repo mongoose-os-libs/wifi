@@ -486,15 +486,6 @@ bool mgos_wifi_dev_sta_disconnect(void) {
   return true;
 }
 
-char *mgos_wifi_get_connected_ssid(void) {
-  wifi_ap_record_t ap_info;
-  if (s_cur_mode == WIFI_MODE_NULL || s_cur_mode == WIFI_MODE_AP ||
-      esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK) {
-    return NULL;
-  }
-  return strdup((char *) ap_info.ssid);
-}
-
 bool mgos_wifi_dev_get_ip_info(int if_instance,
                                struct mgos_net_ip_info *ip_info) {
   tcpip_adapter_ip_info_t info;

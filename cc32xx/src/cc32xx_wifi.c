@@ -409,11 +409,6 @@ bool mgos_wifi_dev_sta_disconnect(void) {
   return (sl_WlanDisconnect() == 0);
 }
 
-char *mgos_wifi_get_connected_ssid(void) {
-  if (s_wifi_sta_config.ssid != NULL) return strdup(s_wifi_sta_config.ssid);
-  return NULL;
-}
-
 bool mgos_wifi_dev_get_ip_info(int if_instance,
                                struct mgos_net_ip_info *ip_info) {
   int r = -1;

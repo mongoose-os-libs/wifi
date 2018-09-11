@@ -363,12 +363,6 @@ bool mgos_wifi_dev_sta_disconnect(void) {
   return wifi_station_disconnect();
 }
 
-char *mgos_wifi_get_connected_ssid(void) {
-  struct station_config conf;
-  if (!wifi_station_get_config(&conf)) return NULL;
-  return strdup((const char *) conf.ssid);
-}
-
 bool mgos_wifi_dev_get_ip_info(int if_instance,
                                struct mgos_net_ip_info *ip_info) {
   struct ip_info info;
