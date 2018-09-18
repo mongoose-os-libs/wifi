@@ -23,7 +23,7 @@
 #include "esp_wifi.h"
 #include "esp_wpa2.h"
 #include "tcpip_adapter.h"
-#include "apps/dhcpserver.h"
+#include "dhcpserver/dhcpserver.h"
 #include "lwip/ip_addr.h"
 
 #include "common/cs_dbg.h"
