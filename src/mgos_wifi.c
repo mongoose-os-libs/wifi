@@ -158,6 +158,7 @@ static void mgos_wifi_on_change_cb(void *arg) {
                                                     : "disconnected")));
       net_event = false;
       ev_arg = &ei->arg;
+      (void) ea;
       break;
     }
   }
