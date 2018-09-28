@@ -408,12 +408,6 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   apcfg->beacon_interval = 100; /* ms */
   LOG(LL_ERROR, ("WiFi AP: SSID %s, channel %d", apcfg->ssid, apcfg->channel));
 
-  r = esp_wifi_set_config(WIFI_IF_AP, &wcfg);
-  if (r != ESP_OK) {
-    LOG(LL_ERROR, ("WiFi AP: Failed to set config: %d", r));
-    goto out;
-  }
-
   tcpip_adapter_dhcps_stop(TCPIP_ADAPTER_IF_AP);
   {
     tcpip_adapter_ip_info_t info;
@@ -440,6 +434,11 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
       LOG(LL_ERROR, ("WiFi AP: Failed to set DHCP config: %d", r));
       goto out;
     }
+  }
+  r = esp_wifi_set_config(WIFI_IF_AP, &wcfg);
+  if (r != ESP_OK) {
+    LOG(LL_ERROR, ("WiFi AP: Failed to set config: %d", r));
+    goto out;
   }
   r = tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP);
   if (r != ESP_OK) {
