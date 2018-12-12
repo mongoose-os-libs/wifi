@@ -102,8 +102,9 @@ static void mgos_wifi_sta_connect_timeout_timer_cb(void *arg);
 struct mgos_wifi_event_internal {
   enum mgos_wifi_event ev;
   union {
-    struct mgos_wifi_ap_sta_connected_arg sta_connected;
-    struct mgos_wifi_ap_sta_disconnected_arg sta_disconnected;
+    struct mgos_wifi_ap_sta_connected_arg ap_sta_connected;
+    struct mgos_wifi_ap_sta_disconnected_arg ap_sta_disconnected;
+    struct mgos_wifi_sta_disconnected_arg sta_disconnected;
   } arg;
 };
 
@@ -119,6 +120,7 @@ static void mgos_wifi_on_change_cb(void *arg) {
           s_sta_should_reconnect) {
         reconnect = s_sta_should_reconnect;
       }
+      ev_arg = &ei->arg;
       s_sta_status = MGOS_WIFI_DISCONNECTED;
       nev = MGOS_NET_EV_DISCONNECTED;
       break;

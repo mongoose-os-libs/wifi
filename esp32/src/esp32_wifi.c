@@ -44,8 +44,9 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
   bool send_mg_ev = false;
   enum mgos_wifi_event mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
   void *mg_ev_arg = NULL;
-  struct mgos_wifi_ap_sta_connected_arg sta_connected;
-  struct mgos_wifi_ap_sta_disconnected_arg sta_disconnected;
+  struct mgos_wifi_sta_disconnected_arg sta_disconnected;
+  struct mgos_wifi_ap_sta_connected_arg ap_sta_connected;
+  struct mgos_wifi_ap_sta_disconnected_arg ap_sta_disconnected;
   system_event_info_t *info = &ev->event_info;
   switch (ev->event_id) {
     case SYSTEM_EVENT_STA_START: {
@@ -58,7 +59,9 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
       LOG(LL_INFO, ("Disconnected from %.*s, reason: %d",
                     (int) info->disconnected.ssid_len, info->disconnected.ssid,
                     info->disconnected.reason));
+      sta_disconnected.esp_disconnect_reason = info->disconnected.reason;
       mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
+      mg_ev_arg = &sta_disconnected;
       send_mg_ev = true;
       break;
     case SYSTEM_EVENT_STA_CONNECTED:
@@ -70,20 +73,20 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
       send_mg_ev = true;
       break;
     case SYSTEM_EVENT_AP_STACONNECTED: {
-      memset(&sta_connected, 0, sizeof(sta_connected));
-      memcpy(sta_connected.mac, ev->event_info.sta_connected.mac,
-             sizeof(sta_connected.mac));
+      memset(&ap_sta_connected, 0, sizeof(ap_sta_connected));
+      memcpy(ap_sta_connected.mac, ev->event_info.sta_connected.mac,
+             sizeof(ap_sta_connected.mac));
       mg_ev = MGOS_WIFI_EV_AP_STA_CONNECTED;
-      mg_ev_arg = &sta_connected;
+      mg_ev_arg = &ap_sta_connected;
       send_mg_ev = true;
       break;
     }
     case SYSTEM_EVENT_AP_STADISCONNECTED: {
-      memset(&sta_disconnected, 0, sizeof(sta_disconnected));
-      memcpy(sta_disconnected.mac, ev->event_info.sta_disconnected.mac,
-             sizeof(sta_disconnected.mac));
+      memset(&ap_sta_disconnected, 0, sizeof(ap_sta_disconnected));
+      memcpy(ap_sta_disconnected.mac, ev->event_info.sta_disconnected.mac,
+             sizeof(ap_sta_disconnected.mac));
       mg_ev = MGOS_WIFI_EV_AP_STA_DISCONNECTED;
-      mg_ev_arg = &sta_disconnected;
+      mg_ev_arg = &ap_sta_disconnected;
       send_mg_ev = true;
       break;
     }

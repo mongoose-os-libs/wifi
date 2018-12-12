@@ -43,8 +43,9 @@ void wifi_changed_cb(System_Event_t *evt) {
   bool send_mg_ev = false;
   enum mgos_wifi_event mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
   void *mg_ev_arg = NULL;
-  struct mgos_wifi_ap_sta_connected_arg sta_connected;
-  struct mgos_wifi_ap_sta_disconnected_arg sta_disconnected;
+  struct mgos_wifi_sta_disconnected_arg sta_disconnected;
+  struct mgos_wifi_ap_sta_connected_arg ap_sta_connected;
+  struct mgos_wifi_ap_sta_disconnected_arg ap_sta_disconnected;
 #ifdef RTOS_SDK
   switch (evt->event_id) {
 #else
@@ -52,6 +53,9 @@ void wifi_changed_cb(System_Event_t *evt) {
 #endif
     case EVENT_STAMODE_DISCONNECTED:
       mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
+      mg_ev_arg = &sta_disconnected;
+      sta_disconnected.esp_disconnect_reason =
+          evt->event_info.disconnected.reason;
       send_mg_ev = true;
       break;
     case EVENT_STAMODE_CONNECTED:
@@ -63,19 +67,19 @@ void wifi_changed_cb(System_Event_t *evt) {
       send_mg_ev = true;
       break;
     case EVENT_SOFTAPMODE_STACONNECTED:
-      memset(&sta_connected, 0, sizeof(sta_connected));
-      memcpy(sta_connected.mac, evt->event_info.sta_connected.mac,
-             sizeof(sta_connected.mac));
+      memset(&ap_sta_connected, 0, sizeof(ap_sta_connected));
+      memcpy(ap_sta_connected.mac, evt->event_info.sta_connected.mac,
+             sizeof(ap_sta_connected.mac));
       mg_ev = MGOS_WIFI_EV_AP_STA_CONNECTED;
-      mg_ev_arg = &sta_connected;
+      mg_ev_arg = &ap_sta_connected;
       send_mg_ev = true;
       break;
     case EVENT_SOFTAPMODE_STADISCONNECTED:
-      memset(&sta_disconnected, 0, sizeof(sta_disconnected));
-      memcpy(sta_disconnected.mac, evt->event_info.sta_disconnected.mac,
-             sizeof(sta_disconnected.mac));
+      memset(&ap_sta_disconnected, 0, sizeof(ap_sta_disconnected));
+      memcpy(ap_sta_disconnected.mac, evt->event_info.sta_disconnected.mac,
+             sizeof(ap_sta_disconnected.mac));
       mg_ev = MGOS_WIFI_EV_AP_STA_DISCONNECTED;
-      mg_ev_arg = &sta_disconnected;
+      mg_ev_arg = &ap_sta_disconnected;
       send_mg_ev = true;
       break;
     case EVENT_SOFTAPMODE_PROBEREQRECVED:

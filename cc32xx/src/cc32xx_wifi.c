@@ -152,7 +152,9 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *e) {
       break;
     }
     case SL_WLAN_EVENT_DISCONNECT: {
-      mgos_wifi_dev_on_change_cb(MGOS_WIFI_EV_STA_DISCONNECTED, NULL);
+      struct mgos_wifi_sta_disconnected_arg arg;
+      memset(&arg, 0, sizeof(arg));
+      mgos_wifi_dev_on_change_cb(MGOS_WIFI_EV_STA_DISCONNECTED, &arg);
       break;
     }
 #if SL_MAJOR_VERSION_NUM >= 2

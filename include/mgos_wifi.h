@@ -36,10 +36,11 @@ extern "C" {
 
 /* In the comment, the type of `void *ev_data` is specified */
 enum mgos_wifi_event {
-  MGOS_WIFI_EV_STA_DISCONNECTED = MGOS_WIFI_EV_BASE, /* Arg: NULL */
-  MGOS_WIFI_EV_STA_CONNECTING,                       /* Arg: NULL */
-  MGOS_WIFI_EV_STA_CONNECTED,                        /* Arg: NULL */
-  MGOS_WIFI_EV_STA_IP_ACQUIRED,                      /* Arg: NULL */
+  MGOS_WIFI_EV_STA_DISCONNECTED =
+      MGOS_WIFI_EV_BASE,            /* Arg: mgos_wifi_sta_disconnected_arg */
+  MGOS_WIFI_EV_STA_CONNECTING,      /* Arg: NULL */
+  MGOS_WIFI_EV_STA_CONNECTED,       /* Arg: NULL */
+  MGOS_WIFI_EV_STA_IP_ACQUIRED,     /* Arg: NULL */
   MGOS_WIFI_EV_AP_STA_CONNECTED,    /* Arg: mgos_wifi_ap_sta_connected_arg */
   MGOS_WIFI_EV_AP_STA_DISCONNECTED, /* Arg: mgos_wifi_ap_sta_disconnected_arg */
 };
@@ -50,6 +51,12 @@ struct mgos_wifi_ap_sta_connected_arg {
 
 struct mgos_wifi_ap_sta_disconnected_arg {
   uint8_t mac[6];
+};
+
+struct mgos_wifi_sta_disconnected_arg {
+#if CS_PLATFORM == CS_P_ESP32 || CS_PLATFORM == CS_P_ESP8266
+  uint8_t esp_disconnect_reason;
+#endif
 };
 
 /*
