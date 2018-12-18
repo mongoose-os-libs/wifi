@@ -22,10 +22,14 @@
 
 #include "common/cs_dbg.h"
 #include "common/platform.h"
+#include "common/platforms/simplelink/sl_fs_slfs.h"
+
+#include "mgos_file_utils.h"
 #include "mgos_hal.h"
 #include "mgos_mongoose.h"
 #include "mgos_net_hal.h"
 #include "mgos_sys_config.h"
+#include "mgos_utils.h"
 #include "mgos_wifi_hal.h"
 
 #if CS_PLATFORM == CS_P_CC3200
@@ -35,6 +39,11 @@
 #ifndef WIFI_SCAN_INTERVAL_SECONDS
 #define WIFI_SCAN_INTERVAL_SECONDS 15
 #endif
+
+#define SL_CERT_FILE_NAME "/sys/cert/client.der"
+#define SL_KEY_FILE_NAME "/sys/cert/private.key"
+#define SL_CA_FILE_NAME "/sys/cert/ca.der"
+#define DUMMY_TOKEN 0x12345678
 
 /* Compatibility with older versions of SimpleLink */
 #if SL_MAJOR_VERSION_NUM < 2
@@ -83,24 +92,18 @@
 
 #endif
 
-struct cc3200_wifi_config {
+struct sl_sta_cfg {
   char *ssid;
-  char *pass;
-  char *user;
-  char *anon_identity;
-  SlNetCfgIpV4Args_t static_ip;
+#if SL_MAJOR_VERSION_NUM >= 2
+  SlWlanSecParams_t sp;
+  SlWlanSecParamsExt_t spext;
+#else
+  SlSecParams_t sp;
+  SlSecParamsExt_t spext;
+#endif
 };
-
-static struct cc3200_wifi_config s_wifi_sta_config;
+static struct sl_sta_cfg s_sta_cfg;
 static int s_current_role = -1;
-
-static void free_wifi_config(void) {
-  free(s_wifi_sta_config.ssid);
-  free(s_wifi_sta_config.pass);
-  free(s_wifi_sta_config.user);
-  free(s_wifi_sta_config.anon_identity);
-  memset(&s_wifi_sta_config, 0, sizeof(s_wifi_sta_config));
-}
 
 static bool restart_nwp(SlWlanMode_e role) {
   /*
@@ -152,8 +155,13 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *e) {
       break;
     }
     case SL_WLAN_EVENT_DISCONNECT: {
-      struct mgos_wifi_sta_disconnected_arg arg;
-      memset(&arg, 0, sizeof(arg));
+      struct mgos_wifi_sta_disconnected_arg arg = {
+#if SL_MAJOR_VERSION_NUM >= 2
+        .reason = e->Data.Disconnect.ReasonCode,
+#else
+        .reason = 0,
+#endif
+      };
       mgos_wifi_dev_on_change_cb(MGOS_WIFI_EV_STA_DISCONNECTED, &arg);
       break;
     }
@@ -206,38 +214,213 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *e) {
   sl_net_app_eh(e);
 }
 
-bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
-  free_wifi_config();
-  s_wifi_sta_config.ssid = strdup(cfg->ssid);
-  if (!mgos_conf_str_empty(cfg->pass)) {
-    s_wifi_sta_config.pass = strdup(cfg->pass);
+#if SL_MAJOR_VERSION_NUM >= 2
+#define EAP_METHOD_NOT_SET 0
+#define EAP_METHOD_INVALID ((uint32_t) -1)
+
+static uint32_t eap_method_from_str(const char *s) {
+  if (strcmp(s, "TLS") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_TLS;
+  } else if (strcmp(s, "TTLS_TLS") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_TTLS_TLS;
+  } else if (strcmp(s, "TTLS_MSCHAPv2") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_TTLS_MSCHAPv2;
+  } else if (strcmp(s, "TTLS_PSK") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_TTLS_PSK;
+  } else if (strcmp(s, "PEAP0_TLS") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_PEAP0_TLS;
+  } else if (strcmp(s, "PEAP0_MSCHAPv2") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_PEAP0_MSCHAPv2;
+  } else if (strcmp(s, "PEAP0_PSK") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_PEAP0_PSK;
+  } else if (strcmp(s, "PEAP1_TLS") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_PEAP1_TLS;
+  } else if (strcmp(s, "PEAP1_PSK") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_PEAP1_PSK;
+  } else if (strcmp(s, "FAST_AUTH_PROVISIONING") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_FAST_AUTH_PROVISIONING;
+  } else if (strcmp(s, "FAST_UNAUTH_PROVISIONING") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_FAST_UNAUTH_PROVISIONING;
+  } else if (strcmp(s, "FAST_NO_PROVISIONING") == 0) {
+    return SL_WLAN_ENT_EAP_METHOD_FAST_NO_PROVISIONING;
+  } else {
+    LOG(LL_ERROR, ("Invalid eap_method"));
+    return EAP_METHOD_INVALID;
   }
-  if (!mgos_conf_str_empty(cfg->user)) {
-    s_wifi_sta_config.user = strdup(cfg->user);
+}
+
+static const char *eap_method_to_str(uint32_t m) {
+  switch (m) {
+    case SL_WLAN_ENT_EAP_METHOD_TLS:
+      return "TLS";
+    case SL_WLAN_ENT_EAP_METHOD_TTLS_TLS:
+      return "TTLS_TLS";
+    case SL_WLAN_ENT_EAP_METHOD_TTLS_MSCHAPv2:
+      return "TTLS_MSCHAPv2";
+    case SL_WLAN_ENT_EAP_METHOD_TTLS_PSK:
+      return "TTLS_PSK";
+    case SL_WLAN_ENT_EAP_METHOD_PEAP0_TLS:
+      return "PEAP0_TLS";
+    case SL_WLAN_ENT_EAP_METHOD_PEAP0_MSCHAPv2:
+      return "PEAP0_MSCHAPv2";
+    case SL_WLAN_ENT_EAP_METHOD_PEAP0_PSK:
+      return "PEAP0_PSK";
+    case SL_WLAN_ENT_EAP_METHOD_PEAP1_TLS:
+      return "PEAP1_TLS";
+    case SL_WLAN_ENT_EAP_METHOD_PEAP1_PSK:
+      return "PEAP1_PSK";
+    case SL_WLAN_ENT_EAP_METHOD_FAST_AUTH_PROVISIONING:
+      return "FAST_AUTH_PROVISIONING";
+    case SL_WLAN_ENT_EAP_METHOD_FAST_UNAUTH_PROVISIONING:
+      return "FAST_UNAUTH_PROVISIONING";
+    case SL_WLAN_ENT_EAP_METHOD_FAST_NO_PROVISIONING:
+      return "FAST_NO_PROVISIONING";
   }
-  if (!mgos_conf_str_empty(cfg->anon_identity)) {
-    s_wifi_sta_config.anon_identity = strdup(cfg->anon_identity);
+  return "INVALID";
+}
+
+static uint32_t get_eap_method(const struct mgos_config_wifi_sta *cfg) {
+  /* If eap_method is specified, use it. */
+  if (!mgos_conf_str_empty(cfg->eap_method)) {
+    return eap_method_from_str(cfg->eap_method);
   }
 
-  memset(&s_wifi_sta_config.static_ip, 0, sizeof(s_wifi_sta_config.static_ip));
-  if (!mgos_conf_str_empty(cfg->ip) && !mgos_conf_str_empty(cfg->netmask)) {
-    SlNetCfgIpV4Args_t *ipcfg = &s_wifi_sta_config.static_ip;
+  /* If full set of TLS credentials are set, it's plain TLS. */
+  if (!mgos_conf_str_empty(cfg->cert) && !mgos_conf_str_empty(cfg->key) &&
+      !mgos_conf_str_empty(cfg->ca_cert)) {
+    return SL_WLAN_ENT_EAP_METHOD_TLS;
+  }
+  /*
+   * If user and CA are provided but client cert is not, it's PEAP.
+   * Assume v0 as most widely used. If user is set, it's MSCHAP, otherwise PSK.
+   */
+  if (!mgos_conf_str_empty(cfg->ca_cert) && mgos_conf_str_empty(cfg->cert)) {
+    if (!mgos_conf_str_empty(cfg->user)) {
+      return SL_WLAN_ENT_EAP_METHOD_PEAP0_MSCHAPv2;
+    } else {
+      return SL_WLAN_ENT_EAP_METHOD_PEAP0_PSK;
+    }
+  }
+  return EAP_METHOD_NOT_SET;
+}
+#endif /* SL_MAJOR_VERSION_NUM >= 2 */
+
+bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
+  bool ret;
+
+  if (!ensure_role_sta()) return false;
+
+  mgos_conf_set_str(&s_sta_cfg.ssid, cfg->ssid);
+
+  mgos_conf_set_str((char **) &s_sta_cfg.sp.Key, cfg->pass);
+  s_sta_cfg.sp.KeyLen = (cfg->pass ? strlen(cfg->pass) : 0);
+
 #if SL_MAJOR_VERSION_NUM >= 2
-    if (!inet_pton(AF_INET, cfg->ip, &ipcfg->Ip) ||
-        !inet_pton(AF_INET, cfg->netmask, &ipcfg->IpMask) ||
-        (!mgos_conf_str_empty(cfg->ip) &&
-         !inet_pton(AF_INET, cfg->gw, &ipcfg->IpGateway))) {
+  s_sta_cfg.spext.EapMethod = get_eap_method(cfg);
+  if (s_sta_cfg.spext.EapMethod != EAP_METHOD_NOT_SET) {
+    if (s_sta_cfg.spext.EapMethod == EAP_METHOD_INVALID) return false;
+
+    /* WPA-enterprise mode */
+    s_sta_cfg.sp.Type = SL_WLAN_SEC_TYPE_WPA_ENT;
+    LOG(LL_INFO, ("WPA-ENT mode, method: %s",
+                  eap_method_to_str(s_sta_cfg.spext.EapMethod)));
+
+    mgos_conf_set_str((char **) &s_sta_cfg.spext.User, cfg->user);
+    s_sta_cfg.spext.UserLen = (cfg->user ? strlen(cfg->user) : 0);
+
+    mgos_conf_set_str((char **) &s_sta_cfg.spext.AnonUser, cfg->anon_identity);
+    s_sta_cfg.spext.AnonUserLen =
+        (cfg->anon_identity ? strlen(cfg->anon_identity) : 0);
+
+    uint32_t token = DUMMY_TOKEN;
+    bool cert_auth_disable = cfg->eap_cert_validation_disable;
+    if (cfg->ca_cert != NULL) {
+      fs_slfs_set_file_flags(SL_CA_FILE_NAME, SL_FS_CREATE_VENDOR_TOKEN |
+                                                  SL_FS_CREATE_NOSIGNATURE |
+                                                  SL_FS_CREATE_PUBLIC_READ,
+                             &token);
+      ret = mgos_file_copy_if_different(cfg->ca_cert, "/slfs" SL_CA_FILE_NAME);
+      fs_slfs_unset_file_flags(SL_CA_FILE_NAME);
+      if (!ret) return false;
+      fs_slfs_unset_file_flags(SL_CA_FILE_NAME);
+
+      /*
+       * If time is not set, connection will not work, for sure.
+       * However, we may get time just as soon as we connect, so disable cert
+       * auth.
+       */
+      SlDateTime_t dt;
+      _u8 opt = SL_DEVICE_GENERAL_DATE_TIME;
+      _u16 len = sizeof(dt);
+      if (sl_DeviceGet(SL_DEVICE_GENERAL, &opt, &len, (_u8 *) (&dt)) == 0 &&
+          dt.tm_year < 2018) {
+        LOG(LL_INFO,
+            ("Time is not set (%04u/%02u/%02u), disabling cert validation",
+             dt.tm_year, dt.tm_mon, dt.tm_day));
+        cert_auth_disable = true;
+      }
+    }
+
+    if (cfg->cert &&
+        !mgos_file_copy_if_different(cfg->cert, "/slfs" SL_CERT_FILE_NAME)) {
       return false;
     }
+    if (cfg->key &&
+        !mgos_file_copy_if_different(cfg->key, "/slfs" SL_KEY_FILE_NAME)) {
+      return false;
+    }
+
+    if (cert_auth_disable) {
+      LOG(LL_WARN,
+          ("Warning: EAP cert auth is disabled, connection is not secure!"));
+    }
+    /* Despite the name, to disable cert check value needs to be 0. */
+    uint8_t value = (cert_auth_disable ? 0 : 1);
+    sl_WlanSet(SL_WLAN_CFG_GENERAL_PARAM_ID,
+               SL_WLAN_GENERAL_PARAM_DISABLE_ENT_SERVER_AUTH, 1, &value);
+
+    unsigned char v = 0;
+    sl_WlanSet(SL_WLAN_CFG_GENERAL_PARAM_ID, 19, 1, &v);
+  } else
+#endif /* SL_MAJOR_VERSION_NUM >= 2 */
+      if (s_sta_cfg.sp.KeyLen > 0) {
+    s_sta_cfg.sp.Type = SL_WLAN_SEC_TYPE_WPA_WPA2;
+  } else {
+    s_sta_cfg.sp.Type = SL_WLAN_SEC_TYPE_OPEN;
+  }
+
+  if (!mgos_conf_str_empty(cfg->ip) && !mgos_conf_str_empty(cfg->netmask)) {
+    SlNetCfgIpV4Args_t ipcfg;
+#if SL_MAJOR_VERSION_NUM >= 2
+    if (!inet_pton(AF_INET, cfg->ip, &ipcfg.Ip) ||
+        !inet_pton(AF_INET, cfg->netmask, &ipcfg.IpMask) ||
+        (!mgos_conf_str_empty(cfg->ip) &&
+         !inet_pton(AF_INET, cfg->gw, &ipcfg.IpGateway))) {
+      return false;
+    }
+    ret = sl_NetCfgSet(SL_NETCFG_IPV4_STA_ADDR_MODE, SL_NETCFG_ADDR_STATIC,
+                       sizeof(ipcfg), (unsigned char *) &ipcfg);
 #else
-    if (!inet_pton(AF_INET, cfg->ip, &ipcfg->ipV4) ||
-        !inet_pton(AF_INET, cfg->netmask, &ipcfg->ipV4Mask) ||
+    if (!inet_pton(AF_INET, cfg->ip, &ipcfg.ipV4) ||
+        !inet_pton(AF_INET, cfg->netmask, &ipcfg.ipV4Mask) ||
         (!mgos_conf_str_empty(cfg->ip) &&
-         !inet_pton(AF_INET, cfg->gw, &ipcfg->ipV4Gateway))) {
+         !inet_pton(AF_INET, cfg->gw, &ipcfg.ipV4Gateway))) {
       return false;
     }
+    ret = sl_NetCfgSet(SL_IPV4_STA_P2P_CL_STATIC_ENABLE,
+                       IPCONFIG_MODE_ENABLE_IPV4, sizeof(ipcfg),
+                       (unsigned char *) &ipcfg);
+#endif
+  } else {
+#if SL_MAJOR_VERSION_NUM >= 2
+    ret = sl_NetCfgSet(SL_NETCFG_IPV4_STA_ADDR_MODE, SL_NETCFG_ADDR_DHCP, 0, 0);
+#else
+    _u8 val = 1;
+    ret = sl_NetCfgSet(SL_IPV4_STA_P2P_CL_DHCP_ENABLE,
+                       IPCONFIG_MODE_ENABLE_IPV4, sizeof(val), &val);
 #endif
   }
+  if (ret != 0) return false;
 
   return true;
 }
@@ -336,66 +519,10 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
 
 bool mgos_wifi_dev_sta_connect(void) {
   int ret;
-#if SL_MAJOR_VERSION_NUM >= 2
-  SlWlanSecParams_t sp;
-  SlWlanSecParamsExt_t spext;
-#else
-  SlSecParams_t sp;
-  SlSecParamsExt_t spext;
-#endif
-
-#if SL_MAJOR_VERSION_NUM >= 2
-  if (s_wifi_sta_config.static_ip.Ip != 0) {
-    ret = sl_NetCfgSet(SL_NETCFG_IPV4_STA_ADDR_MODE, SL_NETCFG_ADDR_STATIC,
-                       sizeof(s_wifi_sta_config.static_ip),
-                       (unsigned char *) &s_wifi_sta_config.static_ip);
-#else
-  if (s_wifi_sta_config.static_ip.ipV4 != 0) {
-    ret = sl_NetCfgSet(SL_IPV4_STA_P2P_CL_STATIC_ENABLE,
-                       IPCONFIG_MODE_ENABLE_IPV4,
-                       sizeof(s_wifi_sta_config.static_ip),
-                       (unsigned char *) &s_wifi_sta_config.static_ip);
-#endif
-  } else {
-#if SL_MAJOR_VERSION_NUM >= 2
-    ret = sl_NetCfgSet(SL_NETCFG_IPV4_STA_ADDR_MODE, SL_NETCFG_ADDR_DHCP, 0, 0);
-#else
-    _u8 val = 1;
-    ret = sl_NetCfgSet(SL_IPV4_STA_P2P_CL_DHCP_ENABLE,
-                       IPCONFIG_MODE_ENABLE_IPV4, sizeof(val), &val);
-#endif
-  }
-  if (ret != 0) return false;
-
-  if (!ensure_role_sta()) return false;
-
-  memset(&sp, 0, sizeof(sp));
-  memset(&spext, 0, sizeof(spext));
-
-  if (s_wifi_sta_config.pass != NULL) {
-    sp.Key = (_i8 *) s_wifi_sta_config.pass;
-    sp.KeyLen = strlen(s_wifi_sta_config.pass);
-  }
-  if (s_wifi_sta_config.user != NULL &&
-      mgos_sys_config_get_wifi_sta_eap_method() != 0) {
-    /* WPA-enterprise mode */
-    sp.Type = SL_WLAN_SEC_TYPE_WPA_ENT;
-    spext.UserLen = strlen(s_wifi_sta_config.user);
-    spext.User = (_i8 *) s_wifi_sta_config.user;
-    if (s_wifi_sta_config.anon_identity != NULL) {
-      spext.AnonUserLen = strlen(s_wifi_sta_config.anon_identity);
-      spext.AnonUser = (_i8 *) s_wifi_sta_config.anon_identity;
-    }
-    spext.EapMethod = mgos_sys_config_get_wifi_sta_eap_method();
-    unsigned char v = 0;
-    sl_WlanSet(SL_WLAN_CFG_GENERAL_PARAM_ID, 19, 1, &v);
-  } else {
-    sp.Type = sp.KeyLen ? SL_WLAN_SEC_TYPE_WPA_WPA2 : SL_WLAN_SEC_TYPE_OPEN;
-  }
-
-  ret = sl_WlanConnect((const _i8 *) s_wifi_sta_config.ssid,
-                       strlen(s_wifi_sta_config.ssid), 0, &sp,
-                       (sp.Type == SL_WLAN_SEC_TYPE_WPA_ENT ? &spext : NULL));
+  ret = sl_WlanConnect(
+      (const _i8 *) s_sta_cfg.ssid, strlen(s_sta_cfg.ssid), 0, &s_sta_cfg.sp,
+      (s_sta_cfg.sp.Type == SL_WLAN_SEC_TYPE_WPA_ENT ? &s_sta_cfg.spext
+                                                     : NULL));
   if (ret != 0) {
     LOG(LL_ERROR, ("sl_WlanConnect failed: %d", ret));
     return false;
@@ -407,7 +534,6 @@ bool mgos_wifi_dev_sta_connect(void) {
 }
 
 bool mgos_wifi_dev_sta_disconnect(void) {
-  free_wifi_config();
   return (sl_WlanDisconnect() == 0);
 }
 
@@ -460,7 +586,11 @@ char *mgos_wifi_get_sta_default_dns(void) {
   SlNetCfgIpV4Args_t info = {0};
   SL_LEN_TYPE len = sizeof(info);
   SL_OPT_TYPE dhcp_is_on = 0;
-  sl_NetCfgGet(SL_NETCFG_IPV4_STA_ADDR_MODE, &dhcp_is_on, &len, (_u8 *) &info);
+  if (sl_NetCfgGet(SL_NETCFG_IPV4_STA_ADDR_MODE, &dhcp_is_on, &len,
+                   (_u8 *) &info) != 0 ||
+      !dhcp_is_on) {
+    return NULL;
+  }
 #if SL_MAJOR_VERSION_NUM >= 2
   return (info.IpDnsServer != 0 ? ip2str(info.IpDnsServer) : NULL);
 #else

@@ -54,9 +54,9 @@ struct mgos_wifi_ap_sta_disconnected_arg {
 };
 
 struct mgos_wifi_sta_disconnected_arg {
-#if CS_PLATFORM == CS_P_ESP32 || CS_PLATFORM == CS_P_ESP8266
-  uint8_t esp_disconnect_reason;
-#endif
+  /* Note that at present this field is only supported on some platforms
+   * and the nomenclature of codes is not standardized. */
+  uint8_t reason;
 };
 
 /*

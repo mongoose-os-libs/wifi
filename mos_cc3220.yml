@@ -2,4 +2,11 @@ sources:
   - cc32xx/src
 
 config_schema:
-  - ["wifi.sta.eap_method", "i", 404226112, {title: "SlSecParamsExt_t.EapMethod value, one of the SL_ENT_EAP_METHOD_* constant; default is SL_ENT_EAP_METHOD_PEAP1_MSCHAPv2"}]
+  - ["wifi.sta.eap_method", "s", "", {title: "Valid values: TLS, TTLS_TLS, TTLS_MSCHAPv2, TTLS_PSK, PEAP0_TLS, PEAP0_MSCHAPv2, PEAP0_PSK, PEAP1_TLS, PEAP1_PSK, FAST_AUTH_PROVISIONING, FAST_UNAUTH_PROVISIONING, FAST_NO_PROVISIONING. If not specified, will try to guess based on parameters provided."}]
+  - ["wifi.sta.eap_cert_validation_disable", "b", false, {title: "Disable server cert validation"}]
+
+  - ["wifi.sta1.eap_method", "s", "", {title: "Valid values: TLS, TTLS_TLS, TTLS_MSCHAPv2, TTLS_PSK, PEAP0_TLS, PEAP0_MSCHAPv2, PEAP0_PSK, PEAP1_TLS, PEAP1_PSK, FAST_AUTH_PROVISIONING, FAST_UNAUTH_PROVISIONING, FAST_NO_PROVISIONING. If not specified, will try to guess based on parameters provided."}]
+  - ["wifi.sta1.eap_cert_validation_disable", "b", false, {title: "Disable server cert validation"}]
+
+  - ["wifi.sta2.eap_method", "s", "", {title: "Valid values: TLS, TTLS_TLS, TTLS_MSCHAPv2, TTLS_PSK, PEAP0_TLS, PEAP0_MSCHAPv2, PEAP0_PSK, PEAP1_TLS, PEAP1_PSK, FAST_AUTH_PROVISIONING, FAST_UNAUTH_PROVISIONING, FAST_NO_PROVISIONING. If not specified, will try to guess based on parameters provided."}]
+  - ["wifi.sta2.eap_cert_validation_disable", "b", false, {title: "Disable server cert validation"}]

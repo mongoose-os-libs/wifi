@@ -54,8 +54,7 @@ void wifi_changed_cb(System_Event_t *evt) {
     case EVENT_STAMODE_DISCONNECTED:
       mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
       mg_ev_arg = &sta_disconnected;
-      sta_disconnected.esp_disconnect_reason =
-          evt->event_info.disconnected.reason;
+      sta_disconnected.reason = evt->event_info.disconnected.reason;
       send_mg_ev = true;
       break;
     case EVENT_STAMODE_CONNECTED:

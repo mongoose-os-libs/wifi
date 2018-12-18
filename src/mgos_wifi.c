@@ -250,6 +250,15 @@ static bool validate_wifi_cfg(const struct mgos_config *cfg, char **msg) {
           mgos_wifi_validate_sta_cfg(&cfg->wifi.sta, msg));
 }
 
+void set_reconnect_timer(void) {
+  if (s_cur_cfg != NULL && s_cur_cfg->sta_connect_timeout > 0 &&
+      s_connect_timer_id == MGOS_INVALID_TIMER_ID) {
+    s_connect_timer_id =
+        mgos_set_timer(s_cur_cfg->sta_connect_timeout * 1000, 0,
+                       mgos_wifi_sta_connect_timeout_timer_cb, NULL);
+  }
+}
+
 bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
   char *err_msg = NULL;
   if (!mgos_wifi_validate_sta_cfg(cfg, &err_msg)) {
@@ -264,6 +273,8 @@ bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
     free(s_sta_ssid);
     s_sta_ssid = strdup(cfg->ssid);
     ret = mgos_wifi_connect();
+  } else {
+    set_reconnect_timer();
   }
   if (ret) s_cur_cfg = NULL;
   wifi_unlock();
@@ -304,12 +315,7 @@ bool mgos_wifi_connect(void) {
   if (ret) {
     mgos_wifi_dev_on_change_cb(MGOS_WIFI_EV_STA_CONNECTING, NULL);
   }
-  if (s_cur_cfg != NULL && s_cur_cfg->sta_connect_timeout > 0 &&
-      s_connect_timer_id == MGOS_INVALID_TIMER_ID) {
-    s_connect_timer_id =
-        mgos_set_timer(s_cur_cfg->sta_connect_timeout * 1000, 0,
-                       mgos_wifi_sta_connect_timeout_timer_cb, NULL);
-  }
+  set_reconnect_timer();
   wifi_unlock();
   return ret;
 }

@@ -59,7 +59,7 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
       LOG(LL_INFO, ("Disconnected from %.*s, reason: %d",
                     (int) info->disconnected.ssid_len, info->disconnected.ssid,
                     info->disconnected.reason));
-      sta_disconnected.esp_disconnect_reason = info->disconnected.reason;
+      sta_disconnected.reason = info->disconnected.reason;
       mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
       mg_ev_arg = &sta_disconnected;
       send_mg_ev = true;
