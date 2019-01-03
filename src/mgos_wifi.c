@@ -250,13 +250,15 @@ static bool validate_wifi_cfg(const struct mgos_config *cfg, char **msg) {
           mgos_wifi_validate_sta_cfg(&cfg->wifi.sta, msg));
 }
 
-void set_reconnect_timer(void) {
-  if (s_cur_cfg != NULL && s_cur_cfg->sta_connect_timeout > 0 &&
-      s_connect_timer_id == MGOS_INVALID_TIMER_ID) {
-    s_connect_timer_id =
-        mgos_set_timer(s_cur_cfg->sta_connect_timeout * 1000, 0,
-                       mgos_wifi_sta_connect_timeout_timer_cb, NULL);
+static void set_reconnect_timer(void) {
+  if (s_cur_cfg == NULL || s_cur_sta_cfg_idx < 0 ||
+      s_cur_cfg->sta_connect_timeout <= 0 ||
+      s_connect_timer_id != MGOS_INVALID_TIMER_ID) {
+    return;
   }
+  s_connect_timer_id =
+      mgos_set_timer(s_cur_cfg->sta_connect_timeout * 1000, 0,
+                     mgos_wifi_sta_connect_timeout_timer_cb, NULL);
 }
 
 bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
@@ -442,6 +444,9 @@ bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {
     trigger_ap = (mgos_gpio_read(gpio) == 0);
   }
 
+  const struct mgos_config_wifi_ap dummy_ap_cfg = {.enable = false};
+  const struct mgos_config_wifi_sta dummy_sta_cfg = {.enable = false};
+
   int sta_cfg_idx = mgos_wifi_get_next_sta_cfg_idx(cfg, cfg->sta_cfg_idx);
   const struct mgos_config_wifi_sta *sta_cfg =
       mgos_wifi_get_sta_cfg(cfg, sta_cfg_idx);
@@ -451,6 +456,8 @@ bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {
     memcpy(&ap_cfg, &cfg->ap, sizeof(ap_cfg));
     ap_cfg.enable = true;
     LOG(LL_INFO, ("WiFi mode: %s", "AP"));
+    /* Disable STA if it was enabled. */
+    mgos_wifi_setup_sta(&dummy_sta_cfg);
     result = mgos_wifi_setup_ap(&ap_cfg);
 #ifdef MGOS_WIFI_ENABLE_AP_STA /* ifdef-ok */
   } else if (cfg->ap.enable && sta_cfg != NULL && cfg->ap.keep_enabled) {
@@ -459,23 +466,21 @@ bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {
 #endif
   } else if (sta_cfg != NULL) {
     LOG(LL_INFO, ("WiFi mode: %s", "STA"));
+    /* Disable AP if it was enabled. */
+    mgos_wifi_setup_ap(&dummy_ap_cfg);
     result = mgos_wifi_setup_sta(sta_cfg);
   } else {
     LOG(LL_INFO, ("WiFi mode: %s", "off"));
+    mgos_wifi_setup_sta(&dummy_sta_cfg);
+    mgos_wifi_setup_ap(&dummy_ap_cfg);
     result = true;
   }
 
-  if (result) {
-    s_cur_cfg = cfg;
-    s_cur_sta_cfg_idx = sta_cfg_idx;
-    mgos_clear_timer(s_connect_timer_id);
-    s_connect_timer_id = MGOS_INVALID_TIMER_ID;
-    if (sta_cfg != NULL && cfg->sta_connect_timeout > 0) {
-      s_connect_timer_id =
-          mgos_set_timer(cfg->sta_connect_timeout * 1000, 0,
-                         mgos_wifi_sta_connect_timeout_timer_cb, NULL);
-    }
-  }
+  s_cur_cfg = cfg;
+  s_cur_sta_cfg_idx = sta_cfg_idx;
+  mgos_clear_timer(s_connect_timer_id);
+  s_connect_timer_id = MGOS_INVALID_TIMER_ID;
+  set_reconnect_timer();
 
   return result;
 }

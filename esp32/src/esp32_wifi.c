@@ -37,7 +37,6 @@
 
 static bool s_inited = false;
 static bool s_started = false;
-static wifi_mode_t s_cur_mode = WIFI_MODE_NULL;
 typedef esp_err_t (*wifi_func_t)(void *arg);
 
 esp_err_t esp32_wifi_ev(system_event_t *ev) {
@@ -130,8 +129,18 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
   return ESP_OK;
 }
 
-static esp_err_t wifi_ensure_init_and_start(wifi_func_t func, void *arg) {
-  esp_err_t r;
+static wifi_mode_t esp32_wifi_get_mode(void) {
+  wifi_mode_t cur_mode = WIFI_MODE_NULL;
+  if (s_inited) {
+    if (esp_wifi_get_mode(&cur_mode) != ESP_OK) {
+      cur_mode = WIFI_MODE_NULL;
+    }
+  }
+  return cur_mode;
+}
+
+static esp_err_t esp32_wifi_ensure_init(void) {
+  esp_err_t r = ESP_OK;
   if (!s_inited) {
     wifi_init_config_t icfg = WIFI_INIT_CONFIG_DEFAULT();
     r = esp_wifi_init(&icfg);
@@ -142,20 +151,24 @@ static esp_err_t wifi_ensure_init_and_start(wifi_func_t func, void *arg) {
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
     s_inited = true;
   }
+out:
+  return r;
+}
+
+static esp_err_t esp32_wifi_ensure_start(void) {
+  esp_err_t r = ESP_OK;
   if (!s_started) {
     r = esp_wifi_start();
     if (r != ESP_OK) {
       LOG(LL_ERROR, ("Failed to start WiFi: %d", r));
       goto out;
     }
+    s_started = true;
+    wifi_ps_type_t ps_type = WIFI_PS_NONE;
+    esp_wifi_get_ps(&ps_type);
     /* Workaround for https://github.com/espressif/esp-idf/issues/1942 */
-    r = esp_wifi_set_ps(WIFI_PS_NONE);
-    if (r != ESP_OK) {
-      LOG(LL_ERROR, ("Failed to set PS mode: %d", r));
-      goto out;
-    }
+    if (ps_type != WIFI_PS_NONE) esp_wifi_set_ps(WIFI_PS_NONE);
   }
-  r = func(arg);
 out:
   return r;
 }
@@ -183,23 +196,35 @@ static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
   LOG(LL_INFO, ("WiFi mode: %s", mode_str));
 
   if (mode == WIFI_MODE_NULL) {
+    if (s_started) {
+      esp_wifi_set_mode(WIFI_MODE_NULL);
+    }
     r = esp_wifi_stop();
     if (r == ESP_ERR_WIFI_NOT_INIT) r = ESP_OK; /* Nothing to stop. */
     if (r == ESP_OK) {
-      s_cur_mode = WIFI_MODE_NULL;
       s_started = false;
     }
     goto out;
   }
 
-  r = wifi_ensure_init_and_start((wifi_func_t) esp_wifi_set_mode,
-                                 (void *) mode);
-  if (r != ESP_OK) {
+  r = esp32_wifi_ensure_init();
+
+  if (r != ESP_OK) goto out;
+
+  if (s_started) {
+    if (esp_wifi_stop() == ESP_OK) {
+      s_started = false;
+    }
+  }
+
+  if ((r = esp_wifi_set_mode(mode)) != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set WiFi mode %d: %d", mode, r));
     goto out;
   }
 
-  s_cur_mode = mode;
+  if ((r = esp32_wifi_ensure_start()) != ESP_OK) {
+    goto out;
+  }
 
 out:
   return r;
@@ -207,13 +232,14 @@ out:
 
 static esp_err_t mgos_wifi_add_mode(wifi_mode_t mode) {
   esp_err_t r = ESP_OK;
-
-  if (s_cur_mode == mode || s_cur_mode == WIFI_MODE_APSTA) {
+  wifi_mode_t cur_mode = esp32_wifi_get_mode();
+  LOG(LL_INFO, ("cur mode: %d", cur_mode));
+  if (cur_mode == mode || cur_mode == WIFI_MODE_APSTA) {
     goto out;
   }
 
-  if ((s_cur_mode == WIFI_MODE_AP && mode == WIFI_MODE_STA) ||
-      (s_cur_mode == WIFI_MODE_STA && mode == WIFI_MODE_AP)) {
+  if ((cur_mode == WIFI_MODE_AP && mode == WIFI_MODE_STA) ||
+      (cur_mode == WIFI_MODE_STA && mode == WIFI_MODE_AP)) {
     mode = WIFI_MODE_APSTA;
   }
 
@@ -226,14 +252,15 @@ out:
 static esp_err_t mgos_wifi_remove_mode(wifi_mode_t mode) {
   esp_err_t r = ESP_OK;
 
-  if ((mode == WIFI_MODE_STA && s_cur_mode == WIFI_MODE_AP) ||
-      (mode == WIFI_MODE_AP && s_cur_mode == WIFI_MODE_STA)) {
+  wifi_mode_t cur_mode = esp32_wifi_get_mode();
+  if ((mode == WIFI_MODE_STA && cur_mode == WIFI_MODE_AP) ||
+      (mode == WIFI_MODE_AP && cur_mode == WIFI_MODE_STA)) {
     /* Nothing to do. */
     goto out;
   }
   if (mode == WIFI_MODE_APSTA ||
-      (mode == WIFI_MODE_STA && s_cur_mode == WIFI_MODE_STA) ||
-      (mode == WIFI_MODE_AP && s_cur_mode == WIFI_MODE_AP)) {
+      (mode == WIFI_MODE_STA && cur_mode == WIFI_MODE_STA) ||
+      (mode == WIFI_MODE_AP && cur_mode == WIFI_MODE_AP)) {
     mode = WIFI_MODE_NULL;
   } else if (mode == WIFI_MODE_STA) {
     mode = WIFI_MODE_AP;
@@ -272,6 +299,9 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
 
   r = mgos_wifi_add_mode(WIFI_MODE_STA);
   if (r != ESP_OK) goto out;
+
+  /* In case already connected, disconnect. */
+  esp_wifi_disconnect();
 
   strncpy((char *) stacfg->ssid, cfg->ssid, sizeof(stacfg->ssid));
   if (mgos_conf_str_empty(cfg->user) /* Not using EAP */ &&
@@ -464,9 +494,10 @@ out:
 }
 
 bool mgos_wifi_dev_sta_connect(void) {
-  if (s_cur_mode == WIFI_MODE_NULL || s_cur_mode == WIFI_MODE_AP) return false;
-  esp_err_t r =
-      wifi_ensure_init_and_start((wifi_func_t) esp_wifi_connect, NULL);
+  if (esp32_wifi_ensure_init() != ESP_OK) return false;
+  wifi_mode_t cur_mode = esp32_wifi_get_mode();
+  if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) return false;
+  esp_err_t r = esp_wifi_connect();
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("WiFi STA: Connect failed: %d", r));
   }
@@ -474,14 +505,14 @@ bool mgos_wifi_dev_sta_connect(void) {
 }
 
 bool mgos_wifi_dev_sta_disconnect(void) {
-  if (s_cur_mode == WIFI_MODE_NULL || s_cur_mode == WIFI_MODE_AP) return false;
+  wifi_mode_t cur_mode = esp32_wifi_get_mode();
+  if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) return false;
   esp_wifi_disconnect();
   /* If we are in station-only mode, stop WiFi task as well. */
-  if (s_cur_mode == WIFI_MODE_STA) {
+  if (cur_mode == WIFI_MODE_STA) {
     esp_err_t r = esp_wifi_stop();
     if (r == ESP_ERR_WIFI_NOT_INIT) r = ESP_OK; /* Nothing to stop. */
     if (r == ESP_OK) {
-      s_cur_mode = WIFI_MODE_NULL;
       s_started = false;
     }
   }
@@ -515,7 +546,6 @@ void mgos_wifi_dev_deinit(void) {
     esp_wifi_deinit();
     s_inited = false;
   }
-  s_cur_mode = WIFI_MODE_NULL;
 }
 
 char *mgos_wifi_get_sta_default_dns() {
@@ -538,7 +568,8 @@ int mgos_wifi_sta_get_rssi(void) {
 
 bool mgos_wifi_dev_start_scan(void) {
   esp_err_t r = ESP_OK;
-  if (s_cur_mode != WIFI_MODE_STA && s_cur_mode != WIFI_MODE_APSTA) {
+  wifi_mode_t cur_mode = esp32_wifi_get_mode();
+  if (cur_mode != WIFI_MODE_STA && cur_mode != WIFI_MODE_APSTA) {
     r = mgos_wifi_add_mode(WIFI_MODE_STA);
     if (r == ESP_OK) r = esp_wifi_start();
   }
