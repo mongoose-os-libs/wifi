@@ -68,9 +68,9 @@ static const struct mgos_config_wifi_sta *mgos_wifi_get_sta_cfg(
     case 0:
       return &cfg->sta;
     case 1:
-      return (const struct mgos_config_wifi_sta *) &cfg->sta1;
+      return &cfg->sta1;
     case 2:
-      return (const struct mgos_config_wifi_sta *) &cfg->sta2;
+      return &cfg->sta2;
   }
   return NULL;
 }
