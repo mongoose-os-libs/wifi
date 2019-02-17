@@ -253,7 +253,8 @@ static esp_err_t mgos_wifi_remove_mode(wifi_mode_t mode) {
   esp_err_t r = ESP_OK;
 
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
-  if ((mode == WIFI_MODE_STA && cur_mode == WIFI_MODE_AP) ||
+  if (cur_mode == WIFI_MODE_NULL ||
+      (mode == WIFI_MODE_STA && cur_mode == WIFI_MODE_AP) ||
       (mode == WIFI_MODE_AP && cur_mode == WIFI_MODE_STA)) {
     /* Nothing to do. */
     goto out;
