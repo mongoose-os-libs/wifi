@@ -43,7 +43,9 @@ config_schema:
   - ["wifi.sta.dhcp_hostname", "s", {title: "Host name to include in DHCP requests"}]
   # sta1 and sta2 are exact copies of the above section and are used to support multiple station configurations.
   - ["wifi.sta1", "wifi.sta", {title: "WiFi Station Config 1"}]
+  - ["wifi.sta1.enable", false]
   - ["wifi.sta2", "wifi.sta", {title: "WiFi Station Config 2"}]
+  - ["wifi.sta2.enable", false]
   # Station configurations will be tried starting from sta_cfg_idx and each one that is enabled
   # will be given sta_connect_timeout seconds to connect. Successfully connected station's index
   # will be saved in sta_cfg_idx so next boot will start with previously used configuration.
