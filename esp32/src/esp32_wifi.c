@@ -37,6 +37,8 @@
 
 static bool s_inited = false;
 static bool s_started = false;
+static bool s_connecting = false;
+
 typedef esp_err_t (*wifi_func_t)(void *arg);
 
 esp_err_t esp32_wifi_ev(system_event_t *ev) {
@@ -66,6 +68,7 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
     case SYSTEM_EVENT_STA_CONNECTED:
       mg_ev = MGOS_WIFI_EV_STA_CONNECTED;
       send_mg_ev = true;
+      s_connecting = false;
       break;
     case SYSTEM_EVENT_STA_GOT_IP:
       mg_ev = MGOS_WIFI_EV_STA_IP_ACQUIRED;
@@ -501,6 +504,9 @@ bool mgos_wifi_dev_sta_connect(void) {
   esp_err_t r = esp_wifi_connect();
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("WiFi STA: Connect failed: %d", r));
+    s_connecting = false;
+  } else {
+    s_connecting = true;
   }
   return (r == ESP_OK);
 }
@@ -515,6 +521,7 @@ bool mgos_wifi_dev_sta_disconnect(void) {
     if (r == ESP_ERR_WIFI_NOT_INIT) r = ESP_OK; /* Nothing to stop. */
     if (r == ESP_OK) {
       s_started = false;
+      s_connecting = false;
     }
   }
   return true;
@@ -584,6 +591,10 @@ bool mgos_wifi_dev_start_scan(void) {
                                        .active = {
                                            .min = 10, .max = 50,
                                        }, }};
+    if( s_connecting ){
+      esp_wifi_disconnect();
+      s_connecting = false;
+    }
     r = esp_wifi_scan_start(&scan_cfg, false /* block */);
   }
   return (r == ESP_OK);
