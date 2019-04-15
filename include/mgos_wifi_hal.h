@@ -39,8 +39,18 @@ enum mgos_wifi_status mgos_wifi_dev_sta_get_status(void);
 bool mgos_wifi_dev_get_ip_info(int if_instance,
                                struct mgos_net_ip_info *ip_info);
 
+struct mgos_wifi_dev_event_info {
+  enum mgos_wifi_event ev;
+  union {
+    struct mgos_wifi_sta_connected_arg sta_connected;
+    struct mgos_wifi_sta_disconnected_arg sta_disconnected;
+    struct mgos_wifi_ap_sta_connected_arg ap_sta_connected;
+    struct mgos_wifi_ap_sta_disconnected_arg ap_sta_disconnected;
+  };
+};
+
 /* Invoke this when Wifi connection state changes. */
-void mgos_wifi_dev_on_change_cb(enum mgos_wifi_event ev, void *arg);
+void mgos_wifi_dev_event_cb(const struct mgos_wifi_dev_event_info *dei);
 
 bool mgos_wifi_dev_start_scan(void);
 /*

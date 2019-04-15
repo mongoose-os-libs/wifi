@@ -1,7 +1,0 @@
-sources:
-  - esp32/src
-includes:
-  - esp32/include
-
-build_vars:
-  MGOS_WIFI_ENABLE_AP_STA: 1

@@ -5,8 +5,11 @@ version: 1.0
 
 sources:
   - src
+  - src/${mos.platform}
+
 includes:
   - include
+  - include/${mos.platform}
 
 config_schema:
   - ["wifi", "o", {hide: true}]
@@ -57,12 +60,39 @@ build_vars:
   MGOS_WIFI_ENABLE_AP_STA: 0
 
 conds:
-  - when: build_vars.MGOS_WIFI_ENABLE_AP_STA == "1"
+  - when: mos.platform == "cc3200"
+    apply:
+      sources:
+        - src/cc32xx
+
+  - when: mos.platform == "cc3220"
+    apply:
+      sources:
+        - src/cc32xx
+      config_schema:
+        - ["wifi.sta.eap_method", "s", "", {title: "Valid values: TLS, TTLS_TLS, TTLS_MSCHAPv2, TTLS_PSK, PEAP0_TLS, PEAP0_MSCHAPv2, PEAP0_PSK, PEAP1_TLS, PEAP1_PSK, FAST_AUTH_PROVISIONING, FAST_UNAUTH_PROVISIONING, FAST_NO_PROVISIONING. If not specified, will try to guess based on parameters provided."}]
+        - ["wifi.sta.eap_cert_validation_disable", "b", false, {title: "Disable server cert validation"}]
+
+  - when: mos.platform == "esp8266"
     apply:
       config_schema:
         - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
       cdefs:
         MGOS_WIFI_ENABLE_AP_STA: 1
+
+  - when: mos.platform == "esp32"
+    apply:
+      config_schema:
+        - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
+      cdefs:
+        MGOS_WIFI_ENABLE_AP_STA: 1
+
+  - when: mos.platform == "rs14100"
+    apply:
+      libs:
+        - origin: https://github.com/mongoose-os-libs/lwip
+      config_schema:
+        - ["wifi.sta.band", "i", 2, {title: "Frequency band for station: 0 - 2.4 GHz, 1 - 5 GHz, 2 - both"}]
 
 cdefs:
   MG_ENABLE_DNS_SERVER: 1

@@ -40,46 +40,33 @@
 static uint8_t s_cur_mode = NULL_MODE;
 
 void wifi_changed_cb(System_Event_t *evt) {
-  bool send_mg_ev = false;
-  enum mgos_wifi_event mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
-  void *mg_ev_arg = NULL;
-  struct mgos_wifi_sta_disconnected_arg sta_disconnected;
-  struct mgos_wifi_ap_sta_connected_arg ap_sta_connected;
-  struct mgos_wifi_ap_sta_disconnected_arg ap_sta_disconnected;
+  struct mgos_wifi_dev_event_info dei = {0};
 #ifdef RTOS_SDK
   switch (evt->event_id) {
 #else
   switch (evt->event) {
 #endif
     case EVENT_STAMODE_DISCONNECTED:
-      mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
-      mg_ev_arg = &sta_disconnected;
-      sta_disconnected.reason = evt->event_info.disconnected.reason;
-      send_mg_ev = true;
+      dei.ev = MGOS_WIFI_EV_STA_DISCONNECTED;
+      dei.sta_disconnected.reason = evt->event_info.disconnected.reason;
       break;
     case EVENT_STAMODE_CONNECTED:
-      mg_ev = MGOS_WIFI_EV_STA_CONNECTED;
-      send_mg_ev = true;
+      dei.ev = MGOS_WIFI_EV_STA_CONNECTED;
+      memcpy(dei.sta_connected.bssid, evt->event_info.connected.bssid, 6);
+      dei.sta_connected.channel = evt->event_info.connected.channel;
       break;
     case EVENT_STAMODE_GOT_IP:
-      mg_ev = MGOS_WIFI_EV_STA_IP_ACQUIRED;
-      send_mg_ev = true;
+      dei.ev = MGOS_WIFI_EV_STA_IP_ACQUIRED;
       break;
     case EVENT_SOFTAPMODE_STACONNECTED:
-      memset(&ap_sta_connected, 0, sizeof(ap_sta_connected));
-      memcpy(ap_sta_connected.mac, evt->event_info.sta_connected.mac,
-             sizeof(ap_sta_connected.mac));
-      mg_ev = MGOS_WIFI_EV_AP_STA_CONNECTED;
-      mg_ev_arg = &ap_sta_connected;
-      send_mg_ev = true;
+      dei.ev = MGOS_WIFI_EV_AP_STA_CONNECTED;
+      memcpy(dei.ap_sta_connected.mac, evt->event_info.sta_connected.mac,
+             sizeof(dei.ap_sta_connected.mac));
       break;
     case EVENT_SOFTAPMODE_STADISCONNECTED:
-      memset(&ap_sta_disconnected, 0, sizeof(ap_sta_disconnected));
-      memcpy(ap_sta_disconnected.mac, evt->event_info.sta_disconnected.mac,
-             sizeof(ap_sta_disconnected.mac));
-      mg_ev = MGOS_WIFI_EV_AP_STA_DISCONNECTED;
-      mg_ev_arg = &ap_sta_disconnected;
-      send_mg_ev = true;
+      dei.ev = MGOS_WIFI_EV_AP_STA_DISCONNECTED;
+      memcpy(dei.ap_sta_disconnected.mac, evt->event_info.sta_disconnected.mac,
+             sizeof(dei.ap_sta_disconnected.mac));
       break;
     case EVENT_SOFTAPMODE_PROBEREQRECVED:
     case EVENT_STAMODE_AUTHMODE_CHANGE:
@@ -92,8 +79,8 @@ void wifi_changed_cb(System_Event_t *evt) {
     }
   }
 
-  if (send_mg_ev) {
-    mgos_wifi_dev_on_change_cb(mg_ev, mg_ev_arg);
+  if (dei.ev != 0) {
+    mgos_wifi_dev_event_cb(&dei);
   }
 }
 

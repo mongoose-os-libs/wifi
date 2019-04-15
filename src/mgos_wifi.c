@@ -99,30 +99,24 @@ static int mgos_wifi_get_next_sta_cfg_idx(const struct mgos_config_wifi *cfg,
 
 static void mgos_wifi_sta_connect_timeout_timer_cb(void *arg);
 
-struct mgos_wifi_event_internal {
-  enum mgos_wifi_event ev;
-  union {
-    struct mgos_wifi_ap_sta_connected_arg ap_sta_connected;
-    struct mgos_wifi_ap_sta_disconnected_arg ap_sta_disconnected;
-    struct mgos_wifi_sta_disconnected_arg sta_disconnected;
-  } arg;
-};
-
-static void mgos_wifi_on_change_cb(void *arg) {
+static void mgos_wifi_event_cb(void *arg) {
   bool reconnect = false, net_event = true;
-  struct mgos_wifi_event_internal *ei = (struct mgos_wifi_event_internal *) arg;
+  struct mgos_wifi_dev_event_info *dei =
+      (struct mgos_wifi_dev_event_info *) arg;
   void *ev_arg = NULL;
   enum mgos_net_event nev = MGOS_NET_EV_DISCONNECTED;
-  switch (ei->ev) {
+  switch (dei->ev) {
     case MGOS_WIFI_EV_STA_DISCONNECTED: {
       if ((s_sta_status == MGOS_WIFI_CONNECTED ||
            s_sta_status == MGOS_WIFI_IP_ACQUIRED) &&
           s_sta_should_reconnect) {
         reconnect = s_sta_should_reconnect;
       }
-      ev_arg = &ei->arg;
+      ev_arg = &dei->sta_disconnected;
       s_sta_status = MGOS_WIFI_DISCONNECTED;
       nev = MGOS_NET_EV_DISCONNECTED;
+      LOG(LL_INFO,
+          ("WiFi STA: Disconnected, reason: %d", dei->sta_disconnected.reason));
       break;
     }
     case MGOS_WIFI_EV_STA_CONNECTING: {
@@ -131,8 +125,15 @@ static void mgos_wifi_on_change_cb(void *arg) {
       break;
     }
     case MGOS_WIFI_EV_STA_CONNECTED: {
+      ev_arg = &dei->sta_connected;
       s_sta_status = MGOS_WIFI_CONNECTED;
       nev = MGOS_NET_EV_CONNECTED;
+      struct mgos_wifi_sta_connected_arg *ea = &dei->sta_connected;
+      ea->rssi = mgos_wifi_sta_get_rssi();
+      LOG(LL_INFO, ("WiFi STA: Connected, BSSID %02x:%02x:%02x:%02x:%02x:%02x "
+                    "ch %d RSSI %d",
+                    ea->bssid[0], ea->bssid[1], ea->bssid[2], ea->bssid[3],
+                    ea->bssid[4], ea->bssid[5], ea->channel, ea->rssi));
       break;
     }
     case MGOS_WIFI_EV_STA_IP_ACQUIRED: {
@@ -151,43 +152,38 @@ static void mgos_wifi_on_change_cb(void *arg) {
     }
     case MGOS_WIFI_EV_AP_STA_CONNECTED:
     case MGOS_WIFI_EV_AP_STA_DISCONNECTED: {
-      struct mgos_wifi_ap_sta_connected_arg *ea =
-          (struct mgos_wifi_ap_sta_connected_arg *) &ei->arg;
+      struct mgos_wifi_ap_sta_connected_arg *ea = &dei->ap_sta_connected;
       LOG(LL_INFO,
           ("%02x:%02x:%02x:%02x:%02x:%02x %s", ea->mac[0], ea->mac[1],
            ea->mac[2], ea->mac[3], ea->mac[4], ea->mac[5],
-           (ei->ev == MGOS_WIFI_EV_AP_STA_CONNECTED ? "connected"
-                                                    : "disconnected")));
+           (dei->ev == MGOS_WIFI_EV_AP_STA_CONNECTED ? "connected"
+                                                     : "disconnected")));
       net_event = false;
-      ev_arg = &ei->arg;
+      ev_arg = &dei->ap_sta_connected;
       (void) ea;
       break;
     }
   }
 
-  mgos_event_trigger(ei->ev, ev_arg);
+  mgos_event_trigger(dei->ev, ev_arg);
 
   if (net_event) {
     mgos_net_dev_event_cb(MGOS_NET_IF_TYPE_WIFI, MGOS_NET_IF_WIFI_STA, nev);
   }
 
-  free(ei);
+  free(dei);
 
   if (reconnect && s_sta_should_reconnect) {
     mgos_wifi_connect();
   }
 }
 
-void mgos_wifi_dev_on_change_cb(enum mgos_wifi_event ev, void *arg) {
-  struct mgos_wifi_event_internal *ei =
-      (struct mgos_wifi_event_internal *) calloc(1, sizeof(*ei));
-  if (ei == NULL) return;
-  ei->ev = ev;
-  if (arg != NULL) {
-    memcpy(&ei->arg, arg,
-           sizeof(ei->arg)); /* This may overshoot a bit. It's ok. */
-  }
-  mgos_invoke_cb(mgos_wifi_on_change_cb, ei, false /* from_isr */);
+void mgos_wifi_dev_event_cb(const struct mgos_wifi_dev_event_info *dei) {
+  struct mgos_wifi_dev_event_info *deic =
+      (struct mgos_wifi_dev_event_info *) calloc(1, sizeof(*deic));
+  if (deic == NULL) return;
+  memcpy(deic, dei, sizeof(*deic));
+  mgos_invoke_cb(mgos_wifi_event_cb, deic, false /* from_isr */);
 }
 
 bool mgos_wifi_validate_sta_cfg(const struct mgos_config_wifi_sta *cfg,
@@ -315,7 +311,10 @@ bool mgos_wifi_connect(void) {
   s_sta_should_reconnect = true;
   bool ret = mgos_wifi_dev_sta_connect();
   if (ret) {
-    mgos_wifi_dev_on_change_cb(MGOS_WIFI_EV_STA_CONNECTING, NULL);
+    struct mgos_wifi_dev_event_info dei = {
+        .ev = MGOS_WIFI_EV_STA_CONNECTING,
+    };
+    mgos_wifi_dev_event_cb(&dei);
   }
   set_reconnect_timer();
   wifi_unlock();
@@ -405,7 +404,7 @@ static void scan_cb_cb(void *arg) {
 
 void mgos_wifi_dev_scan_cb(int num_res, struct mgos_wifi_scan_result *res) {
   if (!s_scan_in_progress) return;
-  LOG(LL_INFO, ("WiFi scan done, num_res %d", num_res));
+  LOG(LL_DEBUG, ("WiFi scan done, num_res %d", num_res));
   struct scan_result_info *ri =
       (struct scan_result_info *) calloc(1, sizeof(*ri));
   ri->num_res = num_res;

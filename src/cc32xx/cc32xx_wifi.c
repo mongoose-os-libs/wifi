@@ -149,37 +149,44 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *e) {
 #else
   _u32 eid = e->Event;
 #endif
+  struct mgos_wifi_dev_event_info dei;
+  memset(&dei, 0, sizeof(dei));
   switch (eid) {
     case SL_WLAN_EVENT_CONNECT: {
-      mgos_wifi_dev_on_change_cb(MGOS_WIFI_EV_STA_CONNECTED, NULL);
+      dei.ev = MGOS_WIFI_EV_STA_CONNECTED;
+#if SL_MAJOR_VERSION_NUM >= 2
+      memcpy(dei.sta_connected.bssid, e->Data.Connect.Bssid, 6);
+#else
+      memcpy(dei.sta_connected.bssid, e->EventData.STAandP2PModeWlanConnected.bssid, 6);
+#endif
       break;
     }
     case SL_WLAN_EVENT_DISCONNECT: {
-      struct mgos_wifi_sta_disconnected_arg arg = {
+      dei.ev = MGOS_WIFI_EV_STA_DISCONNECTED;
 #if SL_MAJOR_VERSION_NUM >= 2
-        .reason = e->Data.Disconnect.ReasonCode,
+      dei.sta_disconnected.reason = e->Data.Disconnect.ReasonCode;
 #else
-        .reason = 0,
+      dei.sta_disconnected.reason = e->EventData.STAandP2PModeDisconnected.reason_code;
 #endif
-      };
-      mgos_wifi_dev_on_change_cb(MGOS_WIFI_EV_STA_DISCONNECTED, &arg);
       break;
     }
 #if SL_MAJOR_VERSION_NUM >= 2
-    case SL_WLAN_EVENT_STA_ADDED:
+    case SL_WLAN_EVENT_STA_ADDED: {
+      dei.ev = MGOS_WIFI_EV_AP_STA_CONNECTED;
+      memcpy(dei.ap_sta_connected.mac, e->Data.STAAdded.Mac, 6);
+      break;
+    }
     case SL_WLAN_EVENT_STA_REMOVED: {
-      struct mgos_wifi_ap_sta_connected_arg arg;
-      memset(&arg, 0, sizeof(arg));
-      memcpy(arg.mac, e->Data.STAAdded.Mac, sizeof(arg.mac));
-      mgos_wifi_dev_on_change_cb(eid == SL_WLAN_EVENT_STA_ADDED
-                                     ? MGOS_WIFI_EV_AP_STA_CONNECTED
-                                     : MGOS_WIFI_EV_AP_STA_DISCONNECTED,
-                                 &arg);
+      dei.ev = MGOS_WIFI_EV_AP_STA_DISCONNECTED;
+      memcpy(dei.ap_sta_disconnected.mac, e->Data.STARemoved.Mac, 6);
       break;
     }
 #endif
     default:
       return;
+  }
+  if (dei.ev != 0) {
+    mgos_wifi_dev_event_cb(&dei);
   }
 }
 
@@ -192,7 +199,10 @@ void sl_net_app_eh(SlNetAppEvent_t *e) {
   SlNetAppEventData_u *edu = &e->EventData;
 #endif
   if (eid == SL_NETAPP_EVENT_IPV4_ACQUIRED && s_current_role == ROLE_STA) {
-    mgos_wifi_dev_on_change_cb(MGOS_WIFI_EV_STA_IP_ACQUIRED, NULL);
+    struct mgos_wifi_dev_event_info dei = {
+      .ev = MGOS_WIFI_EV_STA_IP_ACQUIRED,
+    };
+    mgos_wifi_dev_event_cb(&dei);
   } else if (eid == SL_NETAPP_EVENT_DHCPV4_LEASED) {
 #if SL_MAJOR_VERSION_NUM >= 2
     _u32 ip = edu->IpLeased.IpAddress;

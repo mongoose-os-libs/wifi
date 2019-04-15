@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-#ifndef CS_MOS_LIBS_WIFI_SRC_MGOS_WIFI_H_
-#define CS_MOS_LIBS_WIFI_SRC_MGOS_WIFI_H_
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -39,10 +38,22 @@ enum mgos_wifi_event {
   MGOS_WIFI_EV_STA_DISCONNECTED =
       MGOS_WIFI_EV_BASE,            /* Arg: mgos_wifi_sta_disconnected_arg */
   MGOS_WIFI_EV_STA_CONNECTING,      /* Arg: NULL */
-  MGOS_WIFI_EV_STA_CONNECTED,       /* Arg: NULL */
+  MGOS_WIFI_EV_STA_CONNECTED,       /* Arg: mgos_wifi_sta_connected_arg */
   MGOS_WIFI_EV_STA_IP_ACQUIRED,     /* Arg: NULL */
   MGOS_WIFI_EV_AP_STA_CONNECTED,    /* Arg: mgos_wifi_ap_sta_connected_arg */
   MGOS_WIFI_EV_AP_STA_DISCONNECTED, /* Arg: mgos_wifi_ap_sta_disconnected_arg */
+};
+
+struct mgos_wifi_sta_connected_arg {
+  uint8_t bssid[6];
+  int channel;
+  int rssi;
+};
+
+struct mgos_wifi_sta_disconnected_arg {
+  /* Note that at present this field is only supported on some platforms
+   * and the nomenclature of codes is not standardized. */
+  uint8_t reason;
 };
 
 struct mgos_wifi_ap_sta_connected_arg {
@@ -51,12 +62,6 @@ struct mgos_wifi_ap_sta_connected_arg {
 
 struct mgos_wifi_ap_sta_disconnected_arg {
   uint8_t mac[6];
-};
-
-struct mgos_wifi_sta_disconnected_arg {
-  /* Note that at present this field is only supported on some platforms
-   * and the nomenclature of codes is not standardized. */
-  uint8_t reason;
 };
 
 /*
@@ -246,5 +251,3 @@ void mgos_wifi_scan_js(struct mjs *mjs);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* CS_MOS_LIBS_WIFI_SRC_MGOS_WIFI_H_ */
