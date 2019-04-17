@@ -34,6 +34,7 @@
 #include "lwip/dns.h"
 #include "lwip/netif.h"
 #include "lwip/netifapi.h"
+#include "lwip/prot/dhcp.h"
 #include "netif/etharp.h"
 #include "netif/ethernet.h"
 
@@ -45,7 +46,7 @@ struct rs14100_sta_ctx {
   ip4_addr_t ip, netmask, gw;
   struct netif *netif;
   bool connecting, connected, want_connected;
-  bool waiting_dhcp;
+  bool dhcp_enabled, waiting_dhcp;
   uint8_t sta_bssid[6];
   int sta_channel;
 };
@@ -57,13 +58,17 @@ static void rs14100_wifi_sta_join_cb_tcpip(void *arg) {
   struct rs14100_sta_ctx *ctx = &s_sta_ctx;
   bool ok = (status == RSI_SUCCESS);
   ctx->connecting = false;
-  if (ok) {
+  if (ok && !ctx->connected) {
     ctx->connected = true;
     if (!ctx->want_connected) {
       // This connection should be dropped.
       mgos_wifi_dev_sta_disconnect();
       return;
     }
+
+    // Apply bg scan and roaming settings.
+    rsi_wlan_execute_post_connect_cmds();
+
     netif_set_link_up(ctx->netif);
     struct mgos_wifi_dev_event_info dei = {
         .ev = MGOS_WIFI_EV_STA_CONNECTED,
@@ -74,7 +79,7 @@ static void rs14100_wifi_sta_join_cb_tcpip(void *arg) {
     };
     memcpy(dei.sta_connected.bssid, ctx->sta_bssid, 6);
     mgos_wifi_dev_event_cb(&dei);
-    if (ip4_addr_isany_val(ctx->ip)) {
+    if (ctx->dhcp_enabled) {
       dhcp_start(ctx->netif);
       ctx->waiting_dhcp = true;
     } else {
@@ -82,6 +87,14 @@ static void rs14100_wifi_sta_join_cb_tcpip(void *arg) {
       netif_set_default(ctx->netif);
       dei.ev = MGOS_WIFI_EV_STA_IP_ACQUIRED;
       mgos_wifi_dev_event_cb(&dei);
+    }
+  } else if (ok && ctx->connected) {
+    // When roaming, we want to trigger DHCP renewal just in case
+    // we roamed onto a network with the same SSID but different IP settings.
+    struct dhcp *dhcp = ((struct dhcp *) netif_get_client_data(
+        ctx->netif, LWIP_NETIF_CLIENT_DATA_INDEX_DHCP));
+    if (dhcp->state != DHCP_STATE_OFF) {
+      dhcp_rebind(ctx->netif);
     }
   } else {
     ctx->connected = false;
@@ -122,7 +135,7 @@ void rs14100_wifi_sta_ext_cb_tcpip(struct netif *netif,
                                    const netif_ext_callback_args_t *args) {
   struct rs14100_sta_ctx *ctx = &s_sta_ctx;
   if (netif != ctx->netif) return;
-  if (ctx->waiting_dhcp && (reason & LWIP_NSC_IPV4_ADDRESS_CHANGED) &&
+  if (ctx->dhcp_enabled && (reason & LWIP_NSC_IPV4_ADDRESS_CHANGED) &&
       !ip4_addr_isany_val(ctx->netif->ip_addr)) {
     ctx->waiting_dhcp = false;
     netif_set_default(netif);
@@ -146,9 +159,8 @@ void rs14100_wifi_sta_input(const uint8_t *buffer, uint32_t length) {
   }
 }
 
+// Like rsi_wlan_send_data, but takes data from a pbuf.
 static err_t rs14100_wifi_sta_send_data(struct netif *netif, struct pbuf *p) {
-  // Like rsi_wlan_send_data, but takes data from a pbuf.
-
   err_t res = ERR_OK;
 
   rsi_wlan_cb_t *wlan_cb = rsi_driver_cb->wlan_cb;
@@ -161,7 +173,6 @@ static err_t rs14100_wifi_sta_send_data(struct netif *netif, struct pbuf *p) {
     res = ERR_MEM;
     goto out;
   }
-  // LOG(LL_INFO, ("data %p", pkt));
 
   uint8_t *host_desc = pkt->desc;
   memset(host_desc, 0, RSI_HOST_DESC_LENGTH);
@@ -240,6 +251,13 @@ static void rs14100_wifi_state_notification_handler(uint16_t status,
     case 0x80:
       memcpy(ctx->sta_bssid, sn->bssid, sizeof(ctx->sta_bssid));
       ctx->sta_channel = sn->channel;
+      if (ctx->connected) {  // Roaming.
+        LOG(LL_INFO, ("WiFi STA: Moved to BSSID %02x:%02x:%02x:%02x:%02x:%02x "
+                      "ch %d RSSI %d",
+                      sn->bssid[0], sn->bssid[1], sn->bssid[2], sn->bssid[3],
+                      sn->bssid[4], sn->bssid[5], sn->channel, -sn->rssi_val));
+        rs14100_wifi_sta_join_cb(status, NULL, 0);
+      }
       break;
   }
   (void) length;
@@ -280,6 +298,7 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   ctx->pass = mg_strdup_nul(mg_mk_str(cfg->pass));
 
   if (cfg->ip != NULL && cfg->netmask != NULL) {
+    ctx->dhcp_enabled = false;
     if (!ip4addr_aton(cfg->ip, &ctx->ip)) {
       LOG(LL_ERROR, ("Invalid %s!", "ip"));
       goto out;
@@ -293,6 +312,7 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
       goto out;
     }
   } else {
+    ctx->dhcp_enabled = true;
     memset(&ctx->ip, 0, sizeof(ctx->ip));
     memset(&ctx->netmask, 0, sizeof(ctx->netmask));
     memset(&ctx->gw, 0, sizeof(ctx->gw));
@@ -426,7 +446,15 @@ static void rs14100_wifi_scan_cb(uint16_t status, const uint8_t *buffer,
 }
 
 bool mgos_wifi_dev_start_scan(void) {
-  int32_t status = rsi_wlan_scan_async(NULL, 0, rs14100_wifi_scan_cb);
+  struct rs14100_sta_ctx *ctx = &s_sta_ctx;
+  if (ctx->connecting) return false;  // Already busy scanning.
+  int32_t status;
+  // When already connected use BG scan.
+  if (ctx->connected) {
+    status = rsi_wlan_bgscan_async(rs14100_wifi_scan_cb);
+  } else {
+    status = rsi_wlan_scan_async(NULL, 0, rs14100_wifi_scan_cb);
+  }
   switch (status) {
     case RSI_ERROR_WLAN_NO_AP_FOUND:
       mgos_wifi_dev_scan_cb(0, NULL);

@@ -93,6 +93,18 @@ conds:
         - origin: https://github.com/mongoose-os-libs/lwip
       config_schema:
         - ["wifi.sta.band", "i", 2, {title: "Frequency band for station: 0 - 2.4 GHz, 1 - 5 GHz, 2 - both"}]
+        - ["wifi.sta_params", "o", {title: "Common station params"}]
+        - ["wifi.sta_params.bg_scan", "o", {title: "BG scan params"}]
+        - ["wifi.sta_params.bg_scan.enable", "b", true, {title: "Enable BG scan when connected"}]
+        - ["wifi.sta_params.bg_scan.period", "i", 10, {title: "Perform BG periodically"}]
+        - ["wifi.sta_params.bg_scan.rssi_threshold", "i", -70, {title: "Perform BG scan if RSSI falls below this value"}]
+        - ["wifi.sta_params.bg_scan.rssi_tolerance", "i", 4, {title: "Perform BG scan if RSSI changes by this amount between probes"}]
+        - ["wifi.sta_params.bg_scan.active_duration_ms", "i", 15, {title: "Active scan duration, ms per channel"}]
+        - ["wifi.sta_params.bg_scan.passive_duration_ms", "i", 20, {title: "Passive scan duration, ms per channel (for DFS channels)"}]
+        - ["wifi.sta_params.roaming", "o", {title: "Roaming params"}]
+        - ["wifi.sta_params.roaming.enable", "b", true, {title: "Enable roaming"}]
+        - ["wifi.sta_params.roaming.rssi_threshold", "i", -70, {title: "Find better AP if RSSI falls below this value"}]
+        - ["wifi.sta_params.roaming.rssi_hysteresis", "i", 5, {title: "Move to new AP if its RSSI is better than current by this number"}]
 
 cdefs:
   MG_ENABLE_DNS_SERVER: 1

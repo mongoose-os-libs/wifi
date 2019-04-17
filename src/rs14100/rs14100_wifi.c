@@ -79,6 +79,19 @@ void mgos_wifi_dev_init(void) {
     rsi_wireless_init(RSI_WLAN_CLIENT_MODE, 0);
     rsi_wlan_radio_init();
   }
+  const struct mgos_config_wifi_sta_params_bg_scan *bcfg =
+      mgos_sys_config_get_wifi_sta_params_bg_scan();
+  g_wifi_sta_bg_scan_params.enable = &bcfg->enable;
+  g_wifi_sta_bg_scan_params.period = &bcfg->period;
+  g_wifi_sta_bg_scan_params.rssi_threshold = &bcfg->rssi_threshold;
+  g_wifi_sta_bg_scan_params.rssi_tolerance = &bcfg->rssi_tolerance;
+  g_wifi_sta_bg_scan_params.active_duration_ms = &bcfg->active_duration_ms;
+  g_wifi_sta_bg_scan_params.passive_duration_ms = &bcfg->passive_duration_ms;
+  const struct mgos_config_wifi_sta_params_roaming *rcfg =
+      mgos_sys_config_get_wifi_sta_params_roaming();
+  g_wifi_sta_roaming_params.enable = &rcfg->enable;
+  g_wifi_sta_roaming_params.rssi_threshold = &rcfg->rssi_threshold;
+  g_wifi_sta_roaming_params.rssi_hysteresis = &rcfg->rssi_hysteresis;
 }
 
 void mgos_wifi_dev_deinit(void) {
