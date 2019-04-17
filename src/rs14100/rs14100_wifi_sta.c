@@ -381,7 +381,11 @@ static void rs14100_wifi_scan_cb(uint16_t status, const uint8_t *buffer,
                                  const uint16_t length) {
   rsi_rsp_scan_t *sr = (rsi_rsp_scan_t *) buffer;
   if (status != RSI_SUCCESS) {
-    mgos_wifi_dev_scan_cb(-1, NULL);
+    if (status == RSI_ERROR_WLAN_NO_AP_FOUND) {
+      mgos_wifi_dev_scan_cb(0, NULL);
+    } else {
+      mgos_wifi_dev_scan_cb(-status, NULL);
+    }
     return;
   }
   int num_res = 0;
@@ -422,7 +426,17 @@ static void rs14100_wifi_scan_cb(uint16_t status, const uint8_t *buffer,
 }
 
 bool mgos_wifi_dev_start_scan(void) {
-  return (rsi_wlan_scan_async(NULL, 0, rs14100_wifi_scan_cb) == RSI_SUCCESS);
+  int32_t status = rsi_wlan_scan_async(NULL, 0, rs14100_wifi_scan_cb);
+  switch (status) {
+    case RSI_ERROR_WLAN_NO_AP_FOUND:
+      mgos_wifi_dev_scan_cb(0, NULL);
+    // fallthrough
+    case RSI_SUCCESS:
+      return true;
+    default:
+      LOG(LL_ERROR, ("rsi_wlan_scan_async returned 0x%lx", status));
+      return false;
+  }
 }
 
 char *mgos_wifi_get_sta_default_dns(void) {
