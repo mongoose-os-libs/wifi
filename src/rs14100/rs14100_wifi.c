@@ -47,10 +47,6 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   return true;
 }
 
-uint8_t rs14100_wifi_get_band(void) {
-  return mgos_sys_config_get_wifi_sta_band();
-}
-
 bool mgos_wifi_dev_get_ip_info(int if_instance,
                                struct mgos_net_ip_info *ip_info) {
   switch (if_instance) {
