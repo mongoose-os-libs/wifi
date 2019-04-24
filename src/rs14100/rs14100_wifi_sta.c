@@ -239,14 +239,10 @@ static void rs14100_wifi_state_notification_handler(uint16_t status,
       ctx->sta_channel = 0;
       break;
     case 0x90:
-      // Reasons 0x10 and 0x20 are transient (module is reconnecting).
-      if (ctx->connected &&
-          (sn->reason_code != 0x10 && sn->reason_code != 0x20)) {
-        uint16_t status = sn->reason_code;
-        // This must be non-zero for the logic to work, so invent some reason.
-        if (status == 0) status = 0x42;
-        rs14100_wifi_sta_join_cb(status, NULL, 0);
-      }
+      // The module sends 0x9x status updates when disconnected but
+      // reconnecting.
+      // When it gives up (approx. 20 seconds with current rejoin settings),
+      // it will send join response so here we do nothing.
       break;
     case 0x80:
       memcpy(ctx->sta_bssid, sn->bssid, sizeof(ctx->sta_bssid));
