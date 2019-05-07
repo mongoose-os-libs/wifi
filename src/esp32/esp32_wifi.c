@@ -479,7 +479,8 @@ out:
 }
 
 bool mgos_wifi_dev_sta_connect(void) {
-  if (esp32_wifi_ensure_init() != ESP_OK) return false;
+  if ((esp32_wifi_ensure_init() != ESP_OK) ||
+    (esp32_wifi_ensure_start() != ESP_OK)) return false;
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
   if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) return false;
   esp_err_t r = esp_wifi_connect();
