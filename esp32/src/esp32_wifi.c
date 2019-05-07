@@ -64,6 +64,7 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
       mg_ev = MGOS_WIFI_EV_STA_DISCONNECTED;
       mg_ev_arg = &sta_disconnected;
       send_mg_ev = true;
+      s_connecting = false;
       break;
     case SYSTEM_EVENT_STA_CONNECTED:
       mg_ev = MGOS_WIFI_EV_STA_CONNECTED;
@@ -515,13 +516,13 @@ bool mgos_wifi_dev_sta_disconnect(void) {
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
   if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) return false;
   esp_wifi_disconnect();
+  s_connecting = false;
   /* If we are in station-only mode, stop WiFi task as well. */
   if (cur_mode == WIFI_MODE_STA) {
     esp_err_t r = esp_wifi_stop();
     if (r == ESP_ERR_WIFI_NOT_INIT) r = ESP_OK; /* Nothing to stop. */
     if (r == ESP_OK) {
       s_started = false;
-      s_connecting = false;
     }
   }
   return true;
