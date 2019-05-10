@@ -221,7 +221,7 @@ out:
 static esp_err_t mgos_wifi_add_mode(wifi_mode_t mode) {
   esp_err_t r = ESP_OK;
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
-  LOG(LL_INFO, ("cur mode: %d", cur_mode));
+  LOG(LL_DEBUG, ("cur mode: %d", cur_mode));
   if (cur_mode == mode || cur_mode == WIFI_MODE_APSTA) {
     goto out;
   }
