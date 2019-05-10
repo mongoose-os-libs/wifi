@@ -38,8 +38,10 @@
 static bool s_inited = false;
 static bool s_started = false;
 static bool s_connecting = false;
+static bool s_user_sta_enabled = false;
 
-typedef esp_err_t (*wifi_func_t)(void *arg);
+static esp_err_t esp32_wifi_add_mode(wifi_mode_t mode);
+static esp_err_t esp32_wifi_remove_mode(wifi_mode_t mode);
 
 esp_err_t esp32_wifi_ev(system_event_t *ev) {
   struct mgos_wifi_dev_event_info dei = {0};
@@ -106,6 +108,7 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
         free(aps);
       }
       mgos_wifi_dev_scan_cb(num_res, res);
+      if (!s_user_sta_enabled) esp32_wifi_remove_mode(WIFI_MODE_STA);
       break;
     }
     default:
@@ -229,7 +232,7 @@ out:
   return r;
 }
 
-static esp_err_t mgos_wifi_add_mode(wifi_mode_t mode) {
+static esp_err_t esp32_wifi_add_mode(wifi_mode_t mode) {
   esp_err_t r = ESP_OK;
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
   LOG(LL_DEBUG, ("cur mode: %d", cur_mode));
@@ -248,7 +251,7 @@ out:
   return r;
 }
 
-static esp_err_t mgos_wifi_remove_mode(wifi_mode_t mode) {
+static esp_err_t esp32_wifi_remove_mode(wifi_mode_t mode) {
   esp_err_t r = ESP_OK;
 
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
@@ -292,12 +295,14 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   memset(&wcfg, 0, sizeof(wcfg));
   wifi_sta_config_t *stacfg = &wcfg.sta;
 
+  s_user_sta_enabled = cfg->enable;
+
   if (!cfg->enable) {
-    result = (mgos_wifi_remove_mode(WIFI_MODE_STA) == ESP_OK);
+    result = (esp32_wifi_remove_mode(WIFI_MODE_STA) == ESP_OK);
     goto out;
   }
 
-  r = mgos_wifi_add_mode(WIFI_MODE_STA);
+  r = esp32_wifi_add_mode(WIFI_MODE_STA);
   if (r != ESP_OK) goto out;
 
   /* In case already connected, disconnect. */
@@ -420,11 +425,11 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   wifi_ap_config_t *apcfg = &wcfg.ap;
 
   if (!cfg->enable) {
-    result = (mgos_wifi_remove_mode(WIFI_MODE_AP) == ESP_OK);
+    result = (esp32_wifi_remove_mode(WIFI_MODE_AP) == ESP_OK);
     goto out;
   }
 
-  r = mgos_wifi_add_mode(WIFI_MODE_AP);
+  r = esp32_wifi_add_mode(WIFI_MODE_AP);
   if (r != ESP_OK) goto out;
 
   strncpy((char *) apcfg->ssid, cfg->ssid, sizeof(apcfg->ssid));
@@ -576,7 +581,7 @@ bool mgos_wifi_dev_start_scan(void) {
   esp_err_t r = ESP_OK;
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
   if (cur_mode != WIFI_MODE_STA && cur_mode != WIFI_MODE_APSTA) {
-    r = mgos_wifi_add_mode(WIFI_MODE_STA);
+    r = esp32_wifi_add_mode(WIFI_MODE_STA);
     if (r == ESP_OK) r = esp_wifi_start();
   }
   if (r == ESP_OK) {
