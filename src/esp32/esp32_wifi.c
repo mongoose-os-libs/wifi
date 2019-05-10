@@ -20,11 +20,11 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "dhcpserver/dhcpserver.h"
 #include "esp_wifi.h"
 #include "esp_wpa2.h"
-#include "tcpip_adapter.h"
-#include "dhcpserver/dhcpserver.h"
 #include "lwip/ip_addr.h"
+#include "tcpip_adapter.h"
 
 #include "common/cs_dbg.h"
 #include "common/cs_file.h"
@@ -37,6 +37,8 @@
 
 static bool s_inited = false;
 static bool s_started = false;
+static bool s_connecting = false;
+
 typedef esp_err_t (*wifi_func_t)(void *arg);
 
 esp_err_t esp32_wifi_ev(system_event_t *ev) {
@@ -52,11 +54,15 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
     case SYSTEM_EVENT_STA_DISCONNECTED:
       dei.ev = MGOS_WIFI_EV_STA_DISCONNECTED;
       dei.sta_disconnected.reason = info->disconnected.reason;
+      // Getting a DISCONNECTED event does not change the internal mode,
+      // wifi lib still thinks we are connecting until disconnect() is called.
+      // s_connecting = false;
       break;
     case SYSTEM_EVENT_STA_CONNECTED:
       dei.ev = MGOS_WIFI_EV_STA_CONNECTED;
       memcpy(dei.sta_connected.bssid, info->connected.bssid, 6);
       dei.sta_connected.channel = info->connected.channel;
+      s_connecting = false;
       break;
     case SYSTEM_EVENT_STA_GOT_IP:
       dei.ev = MGOS_WIFI_EV_STA_IP_ACQUIRED;
@@ -142,6 +148,8 @@ out:
 static esp_err_t esp32_wifi_ensure_start(void) {
   esp_err_t r = ESP_OK;
   if (!s_started) {
+    s_started = false;
+    s_connecting = false;
     r = esp_wifi_start();
     if (r != ESP_OK) {
       LOG(LL_ERROR, ("Failed to start WiFi: %d", r));
@@ -149,7 +157,8 @@ static esp_err_t esp32_wifi_ensure_start(void) {
     }
     s_started = true;
     wifi_ps_type_t cur_ps_mode = WIFI_PS_NONE;
-    wifi_ps_type_t want_ps_mode = (wifi_ps_type_t) mgos_sys_config_get_wifi_sta_ps_mode();
+    wifi_ps_type_t want_ps_mode =
+        (wifi_ps_type_t) mgos_sys_config_get_wifi_sta_ps_mode();
     esp_wifi_get_ps(&cur_ps_mode);
     /* Workaround for https://github.com/espressif/esp-idf/issues/1942 */
     if (cur_ps_mode != want_ps_mode) {
@@ -191,6 +200,7 @@ static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
     if (r == ESP_ERR_WIFI_NOT_INIT) r = ESP_OK; /* Nothing to stop. */
     if (r == ESP_OK) {
       s_started = false;
+      s_connecting = false;
     }
     goto out;
   }
@@ -202,6 +212,7 @@ static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
   if (s_started) {
     if (esp_wifi_stop() == ESP_OK) {
       s_started = false;
+      s_connecting = false;
     }
   }
 
@@ -484,12 +495,16 @@ out:
 
 bool mgos_wifi_dev_sta_connect(void) {
   if ((esp32_wifi_ensure_init() != ESP_OK) ||
-    (esp32_wifi_ensure_start() != ESP_OK)) return false;
+      (esp32_wifi_ensure_start() != ESP_OK))
+    return false;
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
   if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) return false;
   esp_err_t r = esp_wifi_connect();
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("WiFi STA: Connect failed: %d", r));
+    s_connecting = false;
+  } else {
+    s_connecting = true;
   }
   return (r == ESP_OK);
 }
@@ -498,6 +513,7 @@ bool mgos_wifi_dev_sta_disconnect(void) {
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
   if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) return false;
   esp_wifi_disconnect();
+  s_connecting = false;
   /* If we are in station-only mode, stop WiFi task as well. */
   if (cur_mode == WIFI_MODE_STA) {
     esp_err_t r = esp_wifi_stop();
@@ -570,9 +586,16 @@ bool mgos_wifi_dev_start_scan(void) {
                                    .show_hidden = false,
                                    .scan_type = WIFI_SCAN_TYPE_ACTIVE,
                                    .scan_time = {
-                                       .active = {
-                                           .min = 10, .max = 50,
-                                       }, }};
+                                       .active =
+                                           {
+                                               .min = 10,
+                                               .max = 50,
+                                           },
+                                   }};
+    if (s_connecting) {
+      esp_wifi_disconnect();
+      s_connecting = false;
+    }
     r = esp_wifi_scan_start(&scan_cfg, false /* block */);
   }
   return (r == ESP_OK);
