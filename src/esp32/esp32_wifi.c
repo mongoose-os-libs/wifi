@@ -148,10 +148,14 @@ static esp_err_t esp32_wifi_ensure_start(void) {
       goto out;
     }
     s_started = true;
-    wifi_ps_type_t ps_type = WIFI_PS_NONE;
-    esp_wifi_get_ps(&ps_type);
+    wifi_ps_type_t cur_ps_mode = WIFI_PS_NONE;
+    wifi_ps_type_t want_ps_mode = (wifi_ps_type_t) mgos_sys_config_get_wifi_sta_ps_mode();
+    esp_wifi_get_ps(&cur_ps_mode);
     /* Workaround for https://github.com/espressif/esp-idf/issues/1942 */
-    if (ps_type != WIFI_PS_NONE) esp_wifi_set_ps(WIFI_PS_NONE);
+    if (cur_ps_mode != want_ps_mode) {
+      LOG(LL_DEBUG, ("WiFi PS %d -> %d", cur_ps_mode, want_ps_mode));
+      esp_wifi_set_ps(want_ps_mode);
+    }
   }
 out:
   return r;

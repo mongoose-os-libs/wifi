@@ -84,6 +84,7 @@ conds:
     apply:
       config_schema:
         - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
+        - ["wifi.sta_ps_mode", "i", 0, {title: "Power save mode for station: 0 - none, 1 - min, 2 - max."}]
       cdefs:
         MGOS_WIFI_ENABLE_AP_STA: 1
 
