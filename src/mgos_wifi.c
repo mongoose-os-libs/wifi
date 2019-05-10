@@ -421,8 +421,9 @@ void mgos_wifi_scan(mgos_wifi_scan_cb_t cb, void *arg) {
   wifi_lock();
   SLIST_INSERT_HEAD(&s_scan_cbs, cbi, next);
   if (!s_scan_in_progress) {
-    s_scan_in_progress = true;
-    if (!mgos_wifi_dev_start_scan()) {
+    if (mgos_wifi_dev_start_scan()) {
+      s_scan_in_progress = true;
+    } else {
       mgos_wifi_dev_scan_cb(-1, NULL);
     }
   }
