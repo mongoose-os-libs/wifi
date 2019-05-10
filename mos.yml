@@ -84,7 +84,9 @@ conds:
     apply:
       config_schema:
         - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
+        - ["wifi.ap.bandwidth_20mhz", "b", false, {title: "enable 20MHz bandwidth AP operation"}]
         - ["wifi.sta_ps_mode", "i", 0, {title: "Power save mode for station: 0 - none, 1 - min, 2 - max."}]
+        - ["wifi.sta_all_chan_scan", "b", false, {title: "true to scan all channels or false to perform fast scan"}]
       cdefs:
         MGOS_WIFI_ENABLE_AP_STA: 1
 

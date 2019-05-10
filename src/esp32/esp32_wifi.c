@@ -301,6 +301,8 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   /* In case already connected, disconnect. */
   esp_wifi_disconnect();
 
+  stacfg->scan_method = (wifi_scan_method_t)mgos_sys_config_get_wifi_sta_all_chan_scan();
+
   strncpy((char *) stacfg->ssid, cfg->ssid, sizeof(stacfg->ssid));
   if (mgos_conf_str_empty(cfg->user) /* Not using EAP */ &&
       !mgos_conf_str_empty(cfg->pass)) {
@@ -469,6 +471,15 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   r = esp_wifi_set_config(WIFI_IF_AP, &wcfg);
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("WiFi AP: Failed to set config: %d", r));
+    goto out;
+  }
+  wifi_bandwidth_t bw = WIFI_BW_HT40;
+  if (cfg->bandwidth_20mhz) {
+    bw = WIFI_BW_HT20;
+  }
+  r = esp_wifi_set_bandwidth(WIFI_IF_AP, bw);
+  if (r != ESP_OK) {
+    LOG(LL_ERROR, ("WiFi AP: Failed to set the bandwidth: %d", r));
     goto out;
   }
   r = tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP);
