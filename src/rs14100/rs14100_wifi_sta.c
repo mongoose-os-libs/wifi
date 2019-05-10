@@ -74,7 +74,7 @@ static void rs14100_wifi_sta_join_cb_tcpip(void *arg) {
         .ev = MGOS_WIFI_EV_STA_CONNECTED,
         .sta_connected =
             {
-             .channel = ctx->sta_channel,
+                .channel = ctx->sta_channel,
             },
     };
     memcpy(dei.sta_connected.bssid, ctx->sta_bssid, 6);
@@ -104,7 +104,7 @@ static void rs14100_wifi_sta_join_cb_tcpip(void *arg) {
         .ev = MGOS_WIFI_EV_STA_DISCONNECTED,
         .sta_disconnected =
             {
-             .reason = status,
+                .reason = status,
             },
     };
     mgos_wifi_dev_event_cb(&dei);
@@ -354,7 +354,7 @@ bool mgos_wifi_dev_sta_connect(void) {
         .ev = MGOS_WIFI_EV_STA_DISCONNECTED,
         .sta_disconnected =
             {
-             .reason = status,
+                .reason = status,
             },
     };
     mgos_wifi_dev_event_cb(&dei);

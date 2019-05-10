@@ -157,7 +157,8 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *e) {
 #if SL_MAJOR_VERSION_NUM >= 2
       memcpy(dei.sta_connected.bssid, e->Data.Connect.Bssid, 6);
 #else
-      memcpy(dei.sta_connected.bssid, e->EventData.STAandP2PModeWlanConnected.bssid, 6);
+      memcpy(dei.sta_connected.bssid,
+             e->EventData.STAandP2PModeWlanConnected.bssid, 6);
 #endif
       break;
     }
@@ -166,7 +167,8 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *e) {
 #if SL_MAJOR_VERSION_NUM >= 2
       dei.sta_disconnected.reason = e->Data.Disconnect.ReasonCode;
 #else
-      dei.sta_disconnected.reason = e->EventData.STAandP2PModeDisconnected.reason_code;
+      dei.sta_disconnected.reason =
+          e->EventData.STAandP2PModeDisconnected.reason_code;
 #endif
       break;
     }
@@ -200,7 +202,7 @@ void sl_net_app_eh(SlNetAppEvent_t *e) {
 #endif
   if (eid == SL_NETAPP_EVENT_IPV4_ACQUIRED && s_current_role == ROLE_STA) {
     struct mgos_wifi_dev_event_info dei = {
-      .ev = MGOS_WIFI_EV_STA_IP_ACQUIRED,
+        .ev = MGOS_WIFI_EV_STA_IP_ACQUIRED,
     };
     mgos_wifi_dev_event_cb(&dei);
   } else if (eid == SL_NETAPP_EVENT_DHCPV4_LEASED) {
@@ -345,9 +347,10 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     uint32_t token = DUMMY_TOKEN;
     bool cert_auth_disable = cfg->eap_cert_validation_disable;
     if (cfg->ca_cert != NULL) {
-      fs_slfs_set_file_flags(SL_CA_FILE_NAME, SL_FS_CREATE_VENDOR_TOKEN |
-                                                  SL_FS_CREATE_NOSIGNATURE |
-                                                  SL_FS_CREATE_PUBLIC_READ,
+      fs_slfs_set_file_flags(SL_CA_FILE_NAME,
+                             SL_FS_CREATE_VENDOR_TOKEN |
+                                 SL_FS_CREATE_NOSIGNATURE |
+                                 SL_FS_CREATE_PUBLIC_READ,
                              &token);
       ret = mgos_file_copy_if_different(cfg->ca_cert, "/slfs" SL_CA_FILE_NAME);
       fs_slfs_unset_file_flags(SL_CA_FILE_NAME);

@@ -29,13 +29,13 @@
 #include "common/cs_dbg.h"
 #include "common/cs_file.h"
 
+#include "lwip/dns.h"
 #include "mgos_gpio.h"
 #include "mgos_hal.h"
 #include "mgos_net_hal.h"
 #include "mgos_sys_config.h"
 #include "mgos_wifi.h"
 #include "mgos_wifi_hal.h"
-#include "lwip/dns.h"
 
 static uint8_t s_cur_mode = NULL_MODE;
 
