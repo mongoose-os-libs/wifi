@@ -212,13 +212,6 @@ static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
 
   if (r != ESP_OK) goto out;
 
-  if (s_started) {
-    if (esp_wifi_stop() == ESP_OK) {
-      s_started = false;
-      s_connecting = false;
-    }
-  }
-
   if ((r = esp_wifi_set_mode(mode)) != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set WiFi mode %d: %d", mode, r));
     goto out;
