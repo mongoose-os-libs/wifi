@@ -93,7 +93,7 @@
 #endif
 
 struct sl_sta_cfg {
-  char *ssid;
+  const char *ssid;
 #if SL_MAJOR_VERSION_NUM >= 2
   SlWlanSecParams_t sp;
   SlWlanSecParamsExt_t spext;
@@ -324,7 +324,7 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
 
   mgos_conf_set_str(&s_sta_cfg.ssid, cfg->ssid);
 
-  mgos_conf_set_str((char **) &s_sta_cfg.sp.Key, cfg->pass);
+  mgos_conf_set_str((const char **) &s_sta_cfg.sp.Key, cfg->pass);
   s_sta_cfg.sp.KeyLen = (cfg->pass ? strlen(cfg->pass) : 0);
 
 #if SL_MAJOR_VERSION_NUM >= 2
@@ -337,10 +337,10 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     LOG(LL_INFO, ("WPA-ENT mode, method: %s",
                   eap_method_to_str(s_sta_cfg.spext.EapMethod)));
 
-    mgos_conf_set_str((char **) &s_sta_cfg.spext.User, cfg->user);
+    mgos_conf_set_str((const char **) &s_sta_cfg.spext.User, cfg->user);
     s_sta_cfg.spext.UserLen = (cfg->user ? strlen(cfg->user) : 0);
 
-    mgos_conf_set_str((char **) &s_sta_cfg.spext.AnonUser, cfg->anon_identity);
+    mgos_conf_set_str((const char **) &s_sta_cfg.spext.AnonUser, cfg->anon_identity);
     s_sta_cfg.spext.AnonUserLen =
         (cfg->anon_identity ? strlen(cfg->anon_identity) : 0);
 
