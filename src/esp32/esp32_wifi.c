@@ -327,6 +327,12 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     tcpip_adapter_dhcpc_start(TCPIP_ADAPTER_IF_STA);
   }
 
+  r = esp_wifi_set_protocol(WIFI_IF_STA, protocol);
+  if (r != ESP_OK) {
+    LOG(LL_ERROR, ("Failed to set STA protocol: %d", r));
+    goto out;
+  }
+
   r = esp_wifi_set_config(WIFI_IF_STA, &wcfg);
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set STA config: %d", r));
@@ -480,6 +486,11 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   r = esp_wifi_set_bandwidth(WIFI_IF_AP, bw);
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("WiFi AP: Failed to set the bandwidth: %d", r));
+    goto out;
+  }
+  r = esp_wifi_set_protocol(WIFI_IF_AP, protocol);
+  if (r != ESP_OK) {
+    LOG(LL_ERROR, ("WiFi AP: Failed to set the protocol: %d", r));
     goto out;
   }
   r = tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP);

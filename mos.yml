@@ -28,7 +28,7 @@ config_schema:
   - ["wifi.ap.dhcp_end", "s", "192.168.4.100", {title: "DHCP End Address"}]
   - ["wifi.ap.trigger_on_gpio", "i", -1, {title: "Trigger AP on low GPIO"}]
   - ["wifi.ap.disable_after", "i", 0, {title: "If > 0, will disable itself after the specified number of seconds"}]
-  - ["wifi.ap.hostname", "s", "", {title: "If not empty, DNS server will resolve given host name to the IP address of AP"}]
+  - ["wifi.ap.hostname", "s", "", {title: "If not empty, DNS server will resolve given host name to the IP address of AP"}]  
 
   - ["wifi.sta", "o", {title: "WiFi Station Config"}]
   - ["wifi.sta.enable", "b", {title: "Connect to existing WiFi"}]
@@ -85,8 +85,10 @@ conds:
       config_schema:
         - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
         - ["wifi.ap.bandwidth_20mhz", "b", false, {title: "enable 20MHz bandwidth AP operation"}]
+        - ["wifi.ap.protocol", "s", "BGN", {title: "Wi-Fi Protocol for AP Mode, defaults to B, G, N"}]
         - ["wifi.sta_ps_mode", "i", 0, {title: "Power save mode for station: 0 - none, 1 - min, 2 - max."}]
         - ["wifi.sta_all_chan_scan", "b", false, {title: "true to scan all channels or false to perform fast scan"}]
+        - ["wifi.sta.protocol", "s", "BGN", {title: "Wi-Fi Protocol for STA Mode, defaults to B, G, N"}]
       cdefs:
         MGOS_WIFI_ENABLE_AP_STA: 1
 
