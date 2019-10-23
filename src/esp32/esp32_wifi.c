@@ -327,7 +327,26 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     tcpip_adapter_dhcpc_start(TCPIP_ADAPTER_IF_STA);
   }
 
-  r = esp_wifi_set_protocol(WIFI_IF_STA, protocol);
+  LOG(LL_INFO, ("Setting STA protocol: %s", cfg->protocol));
+  if (strcmp(cfg->protocol, "B") == 0) {
+    r = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B);
+  } 
+  else if (strcmp(cfg->protocol, "BG") == 0) {
+    r = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G);
+  }
+  else if (strcmp(cfg->protocol, "BGN") == 0) {
+    r = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N);
+  }
+  else if (strcmp(cfg->protocol, "BGNLR") == 0) {
+    r = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR);
+  }
+  else if (strcmp(cfg->protocol, "LR") == 0) {
+    r = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR);
+  }
+  else {
+    r = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N);
+  }
+
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set STA protocol: %d", r));
     goto out;
@@ -488,7 +507,26 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
     LOG(LL_ERROR, ("WiFi AP: Failed to set the bandwidth: %d", r));
     goto out;
   }
-  r = esp_wifi_set_protocol(WIFI_IF_AP, protocol);
+  
+  LOG(LL_INFO, ("Setting AP protocol: %s", cfg->protocol));
+  if (strcmp(cfg->protocol, "B") == 0) {
+    r = esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11B);
+  } 
+  else if (strcmp(cfg->protocol, "BG") == 0) {
+    r = esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G);
+  }
+  else if (strcmp(cfg->protocol, "BGN") == 0) {
+    r = esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N);
+  }
+  else if (strcmp(cfg->protocol, "BGNLR") == 0) {
+    r = esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR);
+  }
+  else if (strcmp(cfg->protocol, "LR") == 0) {
+    r = esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_LR);
+  }
+  else {
+    r = esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N);
+  }
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("WiFi AP: Failed to set the protocol: %d", r));
     goto out;
