@@ -625,7 +625,6 @@ bool mgos_wifi_dev_start_scan(void) {
 
 esp_err_t esp32_wifi_protocol_setup(wifi_interface_t ifx, const char *prot) {
   uint8_t protocol = 0;
-  esp_err_t r = ESP_OK;
   if (strchr(prot, 'B') != NULL) protocol |= WIFI_PROTOCOL_11B;
   if (strchr(prot, 'G') != NULL) protocol |= WIFI_PROTOCOL_11G;
   if (strchr(prot, 'N') != NULL) protocol |= WIFI_PROTOCOL_11N;
