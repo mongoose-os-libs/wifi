@@ -25,6 +25,7 @@ extern "C" {
 #endif
 
 esp_err_t esp32_wifi_ev(system_event_t *event);
+esp_err_t esp32_wifi_protocol_setup(wifi_interface_t ifx, const char *prot);
 
 #ifdef __cplusplus
 }

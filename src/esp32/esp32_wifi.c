@@ -326,6 +326,12 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   } else {
     tcpip_adapter_dhcpc_start(TCPIP_ADAPTER_IF_STA);
   }
+  const char *protocol = cfg->protocol;
+  r = esp32_wifi_protocol_setup(WIFI_IF_STA, protocol);
+  if (r != ESP_OK) {
+    LOG(LL_ERROR, ("Failed to set STA protocol: %s", esp_err_to_name(r)));
+    goto out;
+  }
 
   r = esp_wifi_set_config(WIFI_IF_STA, &wcfg);
   if (r != ESP_OK) {
@@ -482,6 +488,13 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
     LOG(LL_ERROR, ("WiFi AP: Failed to set the bandwidth: %d", r));
     goto out;
   }
+  const char *protocol = cfg->protocol;
+  r = esp32_wifi_protocol_setup(WIFI_IF_AP, protocol);
+  if (r != ESP_OK) {
+    LOG(LL_ERROR, ("Failed to set AP protocol: %s", esp_err_to_name(r)));
+    goto out;
+  }
+  
   r = tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP);
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("WiFi AP: Failed to start DHCP server: %d", r));
@@ -608,4 +621,15 @@ bool mgos_wifi_dev_start_scan(void) {
     r = esp_wifi_scan_start(&scan_cfg, false /* block */);
   }
   return (r == ESP_OK);
+}
+
+esp_err_t esp32_wifi_protocol_setup(wifi_interface_t ifx, const char *prot) {
+  uint8_t protocol = 0;
+  esp_err_t r = ESP_OK;
+  if (strchr(prot, 'B') != NULL) protocol |= WIFI_PROTOCOL_11B;
+  if (strchr(prot, 'G') != NULL) protocol |= WIFI_PROTOCOL_11G;
+  if (strchr(prot, 'N') != NULL) protocol |= WIFI_PROTOCOL_11N;
+  if (strstr(prot, "LR") != NULL) protocol |= WIFI_PROTOCOL_LR;
+  LOG(LL_INFO, ("WiFi %s: protocol %s (%#x)", (ifx == WIFI_IF_STA ? "STA" : "AP"), prot, protocol));
+  return esp_wifi_set_protocol(ifx, protocol);
 }
