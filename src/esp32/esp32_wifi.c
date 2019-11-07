@@ -326,13 +326,15 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   } else {
     tcpip_adapter_dhcpc_start(TCPIP_ADAPTER_IF_STA);
   }
-  const char *protocol = cfg->protocol;
-  r = esp32_wifi_protocol_setup(WIFI_IF_STA, protocol);
-  if (r != ESP_OK) {
-    LOG(LL_ERROR, ("Failed to set STA protocol: %s", esp_err_to_name(r)));
-    goto out;
+  if (!mgos_conf_str_empty(cfg->protocol)) {
+    const char *protocol = cfg->protocol;
+    r = esp32_wifi_protocol_setup(WIFI_IF_STA, protocol);
+    if (r != ESP_OK) {
+      LOG(LL_ERROR, ("Failed to set STA protocol: %s", esp_err_to_name(r)));
+      goto out;
+    }
   }
-
+  
   r = esp_wifi_set_config(WIFI_IF_STA, &wcfg);
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set STA config: %d", r));
