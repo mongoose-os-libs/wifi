@@ -321,7 +321,9 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
     memset(&info, 0, sizeof(info));
     info.netmask.addr = ipaddr_addr(cfg->netmask);
     info.ip.addr = ipaddr_addr(cfg->ip);
-    info.gw.addr = ipaddr_addr(cfg->gw);
+    if (cfg->gw != NULL) {
+      info.gw.addr = ipaddr_addr(cfg->gw);
+    }
     if (!wifi_set_ip_info(SOFTAP_IF, &info)) {
       LOG(LL_ERROR, ("WiFi AP: Failed to set IP config"));
       return false;
