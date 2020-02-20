@@ -23,7 +23,9 @@
 #include <esp_common.h>
 #else
 #include <user_interface.h>
+#if MGOS_ESP8266_WIFI_ENABLE_WPAENT
 #include <wpa2_enterprise.h>
+#endif
 #endif
 
 #include "common/cs_dbg.h"
@@ -204,6 +206,9 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   wifi_station_set_reconnect_policy(0); /* We manage reconnect ourselves */
 
   if (!mgos_conf_str_empty(cfg->cert) || !mgos_conf_str_empty(cfg->user)) {
+/* WPA enterprise does not work properly on ESP8266 anyway due to lack of
+ * resources. */
+#if MGOS_ESP8266_WIFI_ENABLE_WPAENT
     /* WPA-enterprise mode */
     static char *s_ca_cert_pem = NULL, *s_cert_pem = NULL, *s_key_pem = NULL;
 
@@ -261,6 +266,10 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     wifi_station_set_wpa2_enterprise_auth(true /* enable */);
   } else {
     wifi_station_set_wpa2_enterprise_auth(false /* enable */);
+#else
+    LOG(LL_ERROR, ("WPA entrprise not supported, rebuild with "
+                   "MGOS_ESP8266_WIFI_ENABLE_WPAENT"));
+#endif
   }
 
   const char *host_name =
@@ -312,7 +321,9 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
     memset(&info, 0, sizeof(info));
     info.netmask.addr = ipaddr_addr(cfg->netmask);
     info.ip.addr = ipaddr_addr(cfg->ip);
-    info.gw.addr = ipaddr_addr(cfg->gw);
+    if (cfg->gw != NULL) {
+      info.gw.addr = ipaddr_addr(cfg->gw);
+    }
     if (!wifi_set_ip_info(SOFTAP_IF, &info)) {
       LOG(LL_ERROR, ("WiFi AP: Failed to set IP config"));
       return false;

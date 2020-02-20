@@ -59,6 +59,11 @@ config_schema:
 build_vars:
   MGOS_WIFI_ENABLE_AP_STA: 0
 
+cdefs:
+  # WPA enterprise does not work properly on ESP8266 anyway due to lack of resources.
+  # But if you insist, you can override this to 1.
+  MGOS_ESP8266_WIFI_ENABLE_WPAENT: 0
+
 conds:
   - when: mos.platform == "cc3200"
     apply:
