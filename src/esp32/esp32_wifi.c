@@ -334,7 +334,10 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
       goto out;
     }
   }
-
+  if (cfg->listen_interval > 0) {
+    LOG(LL_INFO, ("WiFi STA listen_interval: %d", cfg->listen_interval));
+    stacfg->listen_interval = cfg->listen_interval;
+  }
   r = esp_wifi_set_config(WIFI_IF_STA, &wcfg);
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set STA config: %d", r));
