@@ -336,7 +336,7 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   }
   if (cfg->listen_interval > 0) {
     LOG(LL_INFO, ("WiFi STA listen_interval: %d", cfg->listen_interval));
-    stacfg->listen_interval = cfg->listen_interval;
+    stacfg->listen_interval = cfg->listen_interval / 100;
   }
   r = esp_wifi_set_config(WIFI_IF_STA, &wcfg);
   if (r != ESP_OK) {
@@ -645,8 +645,7 @@ esp_err_t esp32_wifi_protocol_setup(wifi_interface_t ifx, const char *prot) {
   } else if (strcmp(prot, "BGNLR") == 0) {
     protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR);
   } else {
-    //Defaults to BGN
-    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+    return ESP_ERR_NOT_SUPPORTED;
   }
   LOG(LL_INFO, ("WiFi %s: protocol %s (%#x)", (ifx == WIFI_IF_STA ? "STA" : "AP"), prot, protocol));
   return esp_wifi_set_protocol(ifx, protocol);
