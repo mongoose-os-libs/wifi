@@ -401,7 +401,7 @@ void wifi_scan_done(void *arg, STATUS status) {
   }
   struct mgos_wifi_scan_result *r = res;
   STAILQ_FOREACH(p, info, next) {
-    strncpy(r->ssid, (const char *) p->ssid, sizeof(p->ssid));
+    strncpy(r->ssid, (const char *) p->ssid, sizeof(r->ssid));
     memcpy(r->bssid, p->bssid, sizeof(r->bssid));
     r->ssid[sizeof(r->ssid) - 1] = '\0';
     r->channel = p->channel;
