@@ -39,6 +39,7 @@
 #include "mgos_wifi_hal.h"
 
 #include "lwip/dns.h"
+#include "lwip/init.h"
 
 static uint8_t s_cur_mode = NULL_MODE;
 
@@ -449,11 +450,17 @@ void mgos_wifi_dev_deinit(void) {
 
 char *mgos_wifi_get_sta_default_dns(void) {
   char *dns;
-  ip_addr_t dns_addr = dns_getserver(0);
-  if (dns_addr.addr == 0) {
+  const ip_addr_t *dns_addr;
+#if LWIP_VERSION_MAJOR == 1
+  ip_addr_t dns_addr2 = dns_getserver(0);
+  dns_addr = &dns_addr2;
+#else
+  dns_addr = dns_getserver(0);
+#endif
+  if (dns_addr == NULL || dns_addr->addr == 0) {
     return NULL;
   }
-  if (asprintf(&dns, IPSTR, IP2STR(&dns_addr)) < 0) {
+  if (asprintf(&dns, IPSTR, IP2STR(dns_addr)) < 0) {
     return NULL;
   }
   return dns;
