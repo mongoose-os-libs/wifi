@@ -72,8 +72,17 @@ void wifi_changed_cb(System_Event_t *evt) {
       memcpy(dei.ap_sta_disconnected.mac, evt->event_info.sta_disconnected.mac,
              sizeof(dei.ap_sta_disconnected.mac));
       break;
-    case EVENT_SOFTAPMODE_PROBEREQRECVED:
     case EVENT_STAMODE_AUTHMODE_CHANGE:
+      /* Workaround for CVE-2020-12638,
+       * see https://github.com/cesanta/mongoose-os/issues/548.
+       * Can be removed when upgraded to SDK 3.0 or RTOS SDK. */
+      if (evt->event_info.auth_change.old_mode != AUTH_OPEN &&
+          evt->event_info.auth_change.new_mode == AUTH_OPEN) {
+        LOG(LL_ERROR, ("Auth downgrade detected, disconnecting"));
+        wifi_station_disconnect();
+      }
+      break;
+    case EVENT_SOFTAPMODE_PROBEREQRECVED:
     case EVENT_STAMODE_DHCP_TIMEOUT:
 #ifdef RTOS_SDK
     case EVENT_STAMODE_SCAN_DONE:
