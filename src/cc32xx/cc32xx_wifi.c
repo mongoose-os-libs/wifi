@@ -340,7 +340,8 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     mgos_conf_set_str((const char **) &s_sta_cfg.spext.User, cfg->user);
     s_sta_cfg.spext.UserLen = (cfg->user ? strlen(cfg->user) : 0);
 
-    mgos_conf_set_str((const char **) &s_sta_cfg.spext.AnonUser, cfg->anon_identity);
+    mgos_conf_set_str((const char **) &s_sta_cfg.spext.AnonUser,
+                      cfg->anon_identity);
     s_sta_cfg.spext.AnonUserLen =
         (cfg->anon_identity ? strlen(cfg->anon_identity) : 0);
 

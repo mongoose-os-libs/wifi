@@ -584,7 +584,8 @@ void mgos_wifi_dev_deinit(void) {
 char *mgos_wifi_get_sta_default_dns() {
   char *dns = NULL;
   const ip_addr_t *dns_addr = dns_getserver(0);
-  if (dns_addr == NULL || dns_addr->u_addr.ip4.addr == 0 || dns_addr->type != IPADDR_TYPE_V4) {
+  if (dns_addr == NULL || dns_addr->u_addr.ip4.addr == 0 ||
+      dns_addr->type != IPADDR_TYPE_V4) {
     return NULL;
   }
   if (asprintf(&dns, IPSTR, IP2STR(&dns_addr->u_addr.ip4)) < 0) {
@@ -643,10 +644,12 @@ esp_err_t esp32_wifi_protocol_setup(wifi_interface_t ifx, const char *prot) {
   } else if (strcmp(prot, "BGLR") == 0) {
     protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_LR);
   } else if (strcmp(prot, "BGNLR") == 0) {
-    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR);
+    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N |
+                WIFI_PROTOCOL_LR);
   } else {
     return ESP_ERR_NOT_SUPPORTED;
   }
-  LOG(LL_INFO, ("WiFi %s: protocol %s (%#x)", (ifx == WIFI_IF_STA ? "STA" : "AP"), prot, protocol));
+  LOG(LL_INFO, ("WiFi %s: protocol %s (%#x)",
+                (ifx == WIFI_IF_STA ? "STA" : "AP"), prot, protocol));
   return esp_wifi_set_protocol(ifx, protocol);
 }
