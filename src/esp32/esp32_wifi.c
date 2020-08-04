@@ -582,12 +582,12 @@ void mgos_wifi_dev_deinit(void) {
 }
 
 char *mgos_wifi_get_sta_default_dns() {
-  char *dns;
-  ip_addr_t dns_addr = dns_getserver(0);
-  if (dns_addr.u_addr.ip4.addr == 0 || dns_addr.type != IPADDR_TYPE_V4) {
+  char *dns = NULL;
+  const ip_addr_t *dns_addr = dns_getserver(0);
+  if (dns_addr == NULL || dns_addr->u_addr.ip4.addr == 0 || dns_addr->type != IPADDR_TYPE_V4) {
     return NULL;
   }
-  if (asprintf(&dns, IPSTR, IP2STR(&dns_addr.u_addr.ip4)) < 0) {
+  if (asprintf(&dns, IPSTR, IP2STR(&dns_addr->u_addr.ip4)) < 0) {
     return NULL;
   }
   return dns;
