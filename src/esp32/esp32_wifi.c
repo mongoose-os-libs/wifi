@@ -132,9 +132,29 @@ static wifi_mode_t esp32_wifi_get_mode(void) {
   return cur_mode;
 }
 
+// Increase wifi task stack size to support advanced logging.
+static int32_t task_create_pinned_to_core_wrapper_mgos(
+    void *task_func, const char *name, uint32_t stack_depth, void *param,
+    uint32_t prio, void *task_handle, uint32_t core_id) {
+  if (stack_depth < 4608) stack_depth = 4608;
+  return xTaskCreatePinnedToCore(
+      task_func, name, stack_depth, param, prio, task_handle,
+      (core_id < portNUM_PROCESSORS ? core_id : tskNO_AFFINITY));
+}
+
+static int32_t task_create_wrapper_mgos(void *task_func, const char *name,
+                                        uint32_t stack_depth, void *param,
+                                        uint32_t prio, void *task_handle) {
+  if (stack_depth < 4608) stack_depth = 4608;
+  return xTaskCreate(task_func, name, stack_depth, param, prio, task_handle);
+}
+
 static esp_err_t esp32_wifi_ensure_init(void) {
   esp_err_t r = ESP_OK;
   if (!s_inited) {
+    g_wifi_osi_funcs._task_create = task_create_wrapper_mgos;
+    g_wifi_osi_funcs._task_create_pinned_to_core =
+        task_create_pinned_to_core_wrapper_mgos;
     wifi_init_config_t icfg = WIFI_INIT_CONFIG_DEFAULT();
     r = esp_wifi_init(&icfg);
     if (r != ESP_OK) {
