@@ -156,7 +156,8 @@ static bool mgos_wifi_add_mode(uint8_t mode) {
 
 static bool mgos_wifi_remove_mode(uint8_t mode) {
   if ((mode == STATION_MODE && s_cur_mode == SOFTAP_MODE) ||
-      (mode == SOFTAP_MODE && s_cur_mode == STATION_MODE)) {
+      (mode == SOFTAP_MODE && s_cur_mode == STATION_MODE) ||
+      (s_cur_mode == NULL_MODE)) {
     /* Nothing to do. */
     return true;
   }
