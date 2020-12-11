@@ -174,8 +174,9 @@ static bool mgos_wifi_remove_mode(uint8_t mode) {
 }
 
 bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
-  struct station_config sta_cfg;
-  memset(&sta_cfg, 0, sizeof(sta_cfg));
+  struct station_config sta_cfg = {
+      .all_channel_scan = mgos_sys_config_get_wifi_sta_all_chan_scan(),
+  };
 
   if (!cfg->enable) {
     return mgos_wifi_remove_mode(STATION_MODE);
