@@ -19,6 +19,7 @@
 #define CS_MOS_LIBS_WIFI_ESP32_SRC_ESP32_WIFI_H_
 
 #include "esp_event.h"
+#include "esp_wifi_types.h"
 
 #ifdef __cplusplus
 extern "C" {

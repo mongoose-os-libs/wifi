@@ -21,10 +21,12 @@
 #include <string.h>
 
 #include "dhcpserver/dhcpserver.h"
+#include "esp_netif.h"
+#include "esp_netif_types.h"
 #include "esp_wifi.h"
+#include "esp_wifi_types.h"
 #include "esp_wpa2.h"
 #include "lwip/ip_addr.h"
-#include "tcpip_adapter.h"
 
 #include "common/cs_dbg.h"
 #include "common/cs_file.h"
@@ -43,48 +45,52 @@ static bool s_user_sta_enabled = false;
 static esp_err_t esp32_wifi_add_mode(wifi_mode_t mode);
 static esp_err_t esp32_wifi_remove_mode(wifi_mode_t mode);
 
-esp_err_t esp32_wifi_ev(system_event_t *ev) {
+static void esp32_wifi_event_handler(void *ctx, esp_event_base_t ev_base,
+                                     int32_t ev_id, void *ev_data) {
   struct mgos_wifi_dev_event_info dei = {0};
-  system_event_info_t *info = &ev->event_info;
-  switch (ev->event_id) {
-    case SYSTEM_EVENT_STA_START: {
+  switch (ev_id) {
+    case WIFI_EVENT_STA_START: {
       break;
     }
-    case SYSTEM_EVENT_STA_STOP:
+    case WIFI_EVENT_STA_STOP: {
       mgos_wifi_dev_scan_cb(-2, NULL);
       break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
+    }
+    case WIFI_EVENT_STA_DISCONNECTED: {
+      const wifi_event_sta_disconnected_t *info = ev_data;
       dei.ev = MGOS_WIFI_EV_STA_DISCONNECTED;
-      dei.sta_disconnected.reason = info->disconnected.reason;
+      dei.sta_disconnected.reason = info->reason;
       // Getting a DISCONNECTED event does not change the internal mode,
       // wifi lib still thinks we are connecting until disconnect() is called.
       // s_connecting = false;
       break;
-    case SYSTEM_EVENT_STA_CONNECTED:
+    }
+    case WIFI_EVENT_STA_CONNECTED: {
+      const wifi_event_sta_connected_t *info = ev_data;
       dei.ev = MGOS_WIFI_EV_STA_CONNECTED;
-      memcpy(dei.sta_connected.bssid, info->connected.bssid, 6);
-      dei.sta_connected.channel = info->connected.channel;
+      memcpy(dei.sta_connected.bssid, info->bssid, 6);
+      dei.sta_connected.channel = info->channel;
       s_connecting = false;
       break;
-    case SYSTEM_EVENT_STA_GOT_IP:
-      dei.ev = MGOS_WIFI_EV_STA_IP_ACQUIRED;
-      break;
-    case SYSTEM_EVENT_AP_STACONNECTED: {
+    }
+    case WIFI_EVENT_AP_STACONNECTED: {
+      const wifi_event_ap_staconnected_t *info = ev_data;
       dei.ev = MGOS_WIFI_EV_AP_STA_CONNECTED;
-      memcpy(dei.ap_sta_connected.mac, ev->event_info.sta_connected.mac,
+      memcpy(dei.ap_sta_connected.mac, info->mac,
              sizeof(dei.ap_sta_connected.mac));
       break;
     }
-    case SYSTEM_EVENT_AP_STADISCONNECTED: {
-      memcpy(dei.ap_sta_disconnected.mac, ev->event_info.sta_disconnected.mac,
-             sizeof(dei.ap_sta_disconnected.mac));
+    case WIFI_EVENT_AP_STADISCONNECTED: {
+      const wifi_event_ap_stadisconnected_t *info = ev_data;
       dei.ev = MGOS_WIFI_EV_AP_STA_DISCONNECTED;
+      memcpy(dei.ap_sta_disconnected.mac, info->mac,
+             sizeof(dei.ap_sta_disconnected.mac));
       break;
     }
-    case SYSTEM_EVENT_SCAN_DONE: {
+    case WIFI_EVENT_SCAN_DONE: {
       int num_res = -1;
       struct mgos_wifi_scan_result *res = NULL;
-      system_event_sta_scan_done_t *p = &ev->event_info.scan_done;
+      wifi_event_sta_scan_done_t *p = ev_data;
       if (p->status == 0) {
         uint16_t number = p->number;
         wifi_ap_record_t *aps =
@@ -119,7 +125,24 @@ esp_err_t esp32_wifi_ev(system_event_t *ev) {
     mgos_wifi_dev_event_cb(&dei);
   }
 
-  return ESP_OK;
+  (void) ctx;
+  (void) ev_base;
+}
+
+static void esp32_wifi_ip_event_handler(void *ctx, esp_event_base_t ev_base,
+                                        int32_t ev_id, void *ev_data) {
+  struct mgos_wifi_dev_event_info dei = {0};
+  switch (ev_id) {
+    case IP_EVENT_STA_GOT_IP:
+      dei.ev = MGOS_WIFI_EV_STA_IP_ACQUIRED;
+      break;
+  }
+  if (dei.ev != 0) {
+    mgos_wifi_dev_event_cb(&dei);
+  }
+  (void) ctx;
+  (void) ev_base;
+  (void) ev_data;
 }
 
 static wifi_mode_t esp32_wifi_get_mode(void) {
@@ -180,10 +203,9 @@ static esp_err_t esp32_wifi_ensure_start(void) {
     }
     s_started = true;
     wifi_ps_type_t cur_ps_mode = WIFI_PS_NONE;
+    esp_wifi_get_ps(&cur_ps_mode);
     wifi_ps_type_t want_ps_mode =
         (wifi_ps_type_t) mgos_sys_config_get_wifi_sta_ps_mode();
-    esp_wifi_get_ps(&cur_ps_mode);
-    /* Workaround for https://github.com/espressif/esp-idf/issues/1942 */
     if (cur_ps_mode != want_ps_mode) {
       LOG(LL_DEBUG, ("WiFi PS %d -> %d", cur_ps_mode, want_ps_mode));
       esp_wifi_set_ps(want_ps_mode);
@@ -196,24 +218,10 @@ out:
 static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
   esp_err_t r;
 
-  const char *mode_str = NULL;
-  switch (mode) {
-    case WIFI_MODE_NULL:
-      mode_str = "disabled";
-      break;
-    case WIFI_MODE_AP:
-      mode_str = "AP";
-      break;
-    case WIFI_MODE_STA:
-      mode_str = "STA";
-      break;
-    case WIFI_MODE_APSTA:
-      mode_str = "AP+STA";
-      break;
-    default:
-      mode_str = "???";
+  if ((mode == WIFI_MODE_STA || mode == WIFI_MODE_APSTA) &&
+      esp_netif_get_handle_from_ifkey("WIFI_STA_DEF") == NULL) {
+    esp_netif_create_default_wifi_sta();
   }
-  LOG(LL_INFO, ("WiFi mode: %s", mode_str));
 
   if (mode == WIFI_MODE_NULL) {
     if (s_started) {
@@ -234,10 +242,6 @@ static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
 
   if ((r = esp_wifi_set_mode(mode)) != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set WiFi mode %d: %d", mode, r));
-    goto out;
-  }
-
-  if ((r = esp32_wifi_ensure_start()) != ESP_OK) {
     goto out;
   }
 
@@ -296,7 +300,8 @@ static esp_err_t wifi_sta_set_host_name(
   const char *host_name =
       cfg->dhcp_hostname ? cfg->dhcp_hostname : mgos_sys_config_get_device_id();
   if (host_name != NULL) {
-    r = tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA, host_name);
+    esp_netif_t *sta_if = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    r = esp_netif_set_hostname(sta_if, host_name);
   }
   return r;
 }
@@ -330,14 +335,20 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     strncpy((char *) stacfg->password, cfg->pass, sizeof(stacfg->password));
   }
 
+  esp_err_t host_r = wifi_sta_set_host_name(cfg);
+  if (host_r != ESP_OK && host_r != ESP_ERR_ESP_NETIF_IF_NOT_READY) {
+    LOG(LL_ERROR, ("WiFi STA: Failed to set host name"));
+    goto out;
+  }
+
+  esp_netif_t *sta_if = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
   if (!mgos_conf_str_empty(cfg->ip) && !mgos_conf_str_empty(cfg->netmask)) {
-    tcpip_adapter_dhcpc_stop(TCPIP_ADAPTER_IF_STA);
-    tcpip_adapter_ip_info_t info;
-    memset(&info, 0, sizeof(info));
+    esp_netif_dhcpc_stop(sta_if);
+    esp_netif_ip_info_t info = {0};
     info.ip.addr = ipaddr_addr(cfg->ip);
     info.netmask.addr = ipaddr_addr(cfg->netmask);
     if (!mgos_conf_str_empty(cfg->gw)) info.gw.addr = ipaddr_addr(cfg->gw);
-    r = tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_STA, &info);
+    r = esp_netif_set_ip_info(sta_if, &info);
     if (r != ESP_OK) {
       LOG(LL_ERROR, ("Failed to set WiFi STA IP config: %d", r));
       goto out;
@@ -345,14 +356,13 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     LOG(LL_INFO, ("WiFi STA IP: %s/%s gw %s", cfg->ip, cfg->netmask,
                   (cfg->gw ? cfg->gw : "")));
   } else {
-    tcpip_adapter_dhcpc_start(TCPIP_ADAPTER_IF_STA);
+    esp_netif_dhcpc_start(sta_if);
   }
-  if (!mgos_conf_str_empty(cfg->protocol)) {
-    r = esp32_wifi_protocol_setup(WIFI_IF_STA, cfg->protocol);
-    if (r != ESP_OK) {
-      LOG(LL_ERROR, ("Failed to set STA protocol: %s", esp_err_to_name(r)));
-      goto out;
-    }
+
+  r = esp32_wifi_protocol_setup(WIFI_IF_STA, cfg->protocol);
+  if (r != ESP_OK) {
+    LOG(LL_ERROR, ("Failed to set STA protocol: %s", esp_err_to_name(r)));
+    goto out;
   }
   if (cfg->listen_interval_ms > 0) {
     LOG(LL_INFO, ("WiFi STA listen_interval: %dms", cfg->listen_interval_ms));
@@ -425,16 +435,9 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
 
     esp_wifi_sta_wpa2_ent_clear_new_password();
     esp_wifi_sta_wpa2_ent_set_disable_time_check(true /* disable */);
-    esp_wpa2_config_t config = WPA2_CONFIG_INIT_DEFAULT();
-    esp_wifi_sta_wpa2_ent_enable(&config);
+    esp_wifi_sta_wpa2_ent_enable();
   } else {
     esp_wifi_sta_wpa2_ent_disable();
-  }
-
-  esp_err_t host_r = wifi_sta_set_host_name(cfg);
-  if (host_r != ESP_OK && host_r != ESP_ERR_TCPIP_ADAPTER_IF_NOT_READY) {
-    LOG(LL_ERROR, ("WiFi STA: Failed to set host name"));
-    goto out;
   }
 
   result = true;
@@ -446,8 +449,7 @@ out:
 bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   bool result = false;
   esp_err_t r;
-  wifi_config_t wcfg;
-  memset(&wcfg, 0, sizeof(wcfg));
+  wifi_config_t wcfg = {0};
   wifi_ap_config_t *apcfg = &wcfg.ap;
 
   if (!cfg->enable) {
@@ -455,8 +457,7 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
     goto out;
   }
 
-  r = esp32_wifi_add_mode(WIFI_MODE_AP);
-  if (r != ESP_OK) goto out;
+  if (esp32_wifi_add_mode(WIFI_MODE_AP) != ESP_OK) goto out;
 
   strncpy((char *) apcfg->ssid, cfg->ssid, sizeof(apcfg->ssid));
   mgos_expand_mac_address_placeholders((char *) apcfg->ssid);
@@ -472,67 +473,65 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   apcfg->beacon_interval = 100; /* ms */
   LOG(LL_ERROR, ("WiFi AP: SSID %s, channel %d", apcfg->ssid, apcfg->channel));
 
-  tcpip_adapter_dhcps_stop(TCPIP_ADAPTER_IF_AP);
+  esp_netif_t *ap_if = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+  if (ap_if == NULL) ap_if = esp_netif_create_default_wifi_ap();
+  if (ap_if == NULL) goto out;
+  // Ensure that DHCP server is not running.
+  while (esp_netif_dhcps_stop(ap_if) !=
+         ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
+  }
   {
-    tcpip_adapter_ip_info_t info;
-    memset(&info, 0, sizeof(info));
-    info.ip.addr = ipaddr_addr(cfg->ip);
-    info.netmask.addr = ipaddr_addr(cfg->netmask);
+    esp_netif_ip_info_t info = {
+        .ip.addr = ipaddr_addr(cfg->ip),
+        .netmask.addr = ipaddr_addr(cfg->netmask),
+    };
     if (!mgos_conf_str_empty(cfg->gw)) info.gw.addr = ipaddr_addr(cfg->gw);
-    r = tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &info);
+    r = esp_netif_set_ip_info(ap_if, &info);
     if (r != ESP_OK) {
       LOG(LL_ERROR, ("WiFi AP: Failed to set IP config: %d", r));
       goto out;
     }
   }
   {
-    dhcps_lease_t opt;
-    memset(&opt, 0, sizeof(opt));
-    opt.enable = true;
-    opt.start_ip.addr = ipaddr_addr(cfg->dhcp_start);
-    opt.end_ip.addr = ipaddr_addr(cfg->dhcp_end);
-    r = tcpip_adapter_dhcps_option(TCPIP_ADAPTER_OP_SET,
-                                   TCPIP_ADAPTER_REQUESTED_IP_ADDRESS, &opt,
-                                   sizeof(opt));
+    dhcps_lease_t opt = {
+        .enable = true,
+        .start_ip.addr = ipaddr_addr(cfg->dhcp_start),
+        .end_ip.addr = ipaddr_addr(cfg->dhcp_end),
+    };
+    r = esp_netif_dhcps_option(ap_if, ESP_NETIF_OP_SET,
+                               ESP_NETIF_REQUESTED_IP_ADDRESS, &opt,
+                               sizeof(opt));
     if (r != ESP_OK) {
       LOG(LL_ERROR, ("WiFi AP: Failed to set DHCP config: %d", r));
       goto out;
     }
   }
-  r = esp_wifi_set_config(WIFI_IF_AP, &wcfg);
-  if (r != ESP_OK) {
+  if ((r = esp_wifi_set_config(WIFI_IF_AP, &wcfg)) != ESP_OK) {
     LOG(LL_ERROR, ("WiFi AP: Failed to set config: %d", r));
     goto out;
   }
   wifi_bandwidth_t bw = WIFI_BW_HT40;
-  if (cfg->bandwidth_20mhz) {
-    bw = WIFI_BW_HT20;
-  }
-  r = esp_wifi_set_bandwidth(WIFI_IF_AP, bw);
-  if (r != ESP_OK) {
+  if (cfg->bandwidth_20mhz) bw = WIFI_BW_HT20;
+  if ((r = esp_wifi_set_bandwidth(WIFI_IF_AP, bw)) != ESP_OK) {
     LOG(LL_ERROR, ("WiFi AP: Failed to set the bandwidth: %d", r));
     goto out;
   }
-  const char *protocol = cfg->protocol;
-  r = esp32_wifi_protocol_setup(WIFI_IF_AP, protocol);
+  r = esp32_wifi_protocol_setup(WIFI_IF_AP, cfg->protocol);
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set AP protocol: %s", esp_err_to_name(r)));
     goto out;
   }
-
-  r = tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP);
-  if (r != ESP_OK) {
+  if ((r = esp32_wifi_ensure_start()) != ESP_OK) {
+    goto out;
+  }
+  if ((r = esp_netif_dhcps_start(ap_if)) != ESP_OK &&
+      r != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) {
     LOG(LL_ERROR, ("WiFi AP: Failed to start DHCP server: %d", r));
     goto out;
   }
   LOG(LL_INFO,
       ("WiFi AP IP: %s/%s gw %s, DHCP range %s - %s", cfg->ip, cfg->netmask,
        (cfg->gw ? cfg->gw : "(none)"), cfg->dhcp_start, cfg->dhcp_end));
-
-  /* There is no way to tell if AP is running already. */
-  esp_wifi_start();
-
-  LOG(LL_INFO, ("WiFi AP: SSID %s, channel %d", apcfg->ssid, apcfg->channel));
 
   result = true;
 
@@ -574,11 +573,10 @@ bool mgos_wifi_dev_sta_disconnect(void) {
 
 bool mgos_wifi_dev_get_ip_info(int if_instance,
                                struct mgos_net_ip_info *ip_info) {
-  tcpip_adapter_ip_info_t info;
-  if ((tcpip_adapter_get_ip_info(
-           (if_instance == 0 ? TCPIP_ADAPTER_IF_STA : TCPIP_ADAPTER_IF_AP),
-           &info) != ESP_OK) ||
-      info.ip.addr == 0) {
+  esp_netif_ip_info_t info;
+  esp_netif_t *netif = esp_netif_get_handle_from_ifkey(
+      if_instance == 0 ? "WIFI_STA_DEF" : "WIFI_AP_DEF");
+  if ((esp_netif_get_ip_info(netif, &info) != ESP_OK) || info.ip.addr == 0) {
     return false;
   }
   ip_info->ip.sin_addr.s_addr = info.ip.addr;
@@ -588,6 +586,10 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
 }
 
 void mgos_wifi_dev_init(void) {
+  esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                             esp32_wifi_event_handler, NULL);
+  esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID,
+                             esp32_wifi_ip_event_handler, NULL);
 }
 
 void mgos_wifi_dev_deinit(void) {
@@ -650,6 +652,7 @@ bool mgos_wifi_dev_start_scan(void) {
 }
 
 esp_err_t esp32_wifi_protocol_setup(wifi_interface_t ifx, const char *prot) {
+  if (mgos_conf_str_empty(prot)) return ESP_OK;
   uint8_t protocol = 0;
   if (strcmp(prot, "B") == 0) {
     protocol = WIFI_PROTOCOL_11B;
