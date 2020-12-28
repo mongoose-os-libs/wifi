@@ -131,17 +131,13 @@ static void esp32_wifi_event_handler(void *ctx, esp_event_base_t ev_base,
 
 static void esp32_wifi_ip_event_handler(void *ctx, esp_event_base_t ev_base,
                                         int32_t ev_id, void *ev_data) {
-  struct mgos_wifi_dev_event_info dei = {0};
-  switch (ev_id) {
-    case IP_EVENT_STA_GOT_IP:
-      dei.ev = MGOS_WIFI_EV_STA_IP_ACQUIRED;
-      break;
-  }
-  if (dei.ev != 0) {
-    mgos_wifi_dev_event_cb(&dei);
-  }
+  struct mgos_wifi_dev_event_info dei = {
+      .ev = MGOS_WIFI_EV_STA_IP_ACQUIRED,
+  };
+  mgos_wifi_dev_event_cb(&dei);
   (void) ctx;
   (void) ev_base;
+  (void) ev_id;
   (void) ev_data;
 }
 
@@ -588,7 +584,7 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
 void mgos_wifi_dev_init(void) {
   esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                              esp32_wifi_event_handler, NULL);
-  esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID,
+  esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                              esp32_wifi_ip_event_handler, NULL);
 }
 
