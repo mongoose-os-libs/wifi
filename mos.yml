@@ -82,7 +82,7 @@ conds:
     apply:
       config_schema:
         - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
-        - ["wifi.sta_all_chan_scan", "b", false, {title: "true to scan all channels or false to perform fast scan"}]
+        - ["wifi.sta_all_chan_scan", "b", true, {title: "true to scan all channels or false to perform fast scan"}]
       cdefs:
         MGOS_WIFI_ENABLE_AP_STA: 1
 
@@ -93,7 +93,7 @@ conds:
         - ["wifi.ap.bandwidth_20mhz", "b", false, {title: "enable 20MHz bandwidth AP operation"}]
         - ["wifi.ap.protocol", "s", "BGN", {title: "802.11 Wi-Fi Protocol for AP Mode, defaults to BGN, can be any combination of BGNLR. Note LR only works between 2 ESP32 devices."}]
         - ["wifi.sta_ps_mode", "i", 0, {title: "Power save mode for station: 0 - none, 1 - min, 2 - max."}]
-        - ["wifi.sta_all_chan_scan", "b", false, {title: "true to scan all channels or false to perform fast scan"}]
+        - ["wifi.sta_all_chan_scan", "b", true, {title: "true to scan all channels or false to perform fast scan"}]
         - ["wifi.sta.protocol", "s", "BGN", {title: "802.11 Wi-Fi Protocol for STA Mode, defaults to BGN, can be any combination of BGNLR. Note LR only works between 2 ESP32 devices."}]
         - ["wifi.sta.listen_interval_ms", "i", 0, {title: "DTIM Listen Interval (ms)"}]
       cdefs:
