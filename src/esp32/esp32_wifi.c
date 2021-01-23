@@ -50,9 +50,11 @@ static void esp32_wifi_event_handler(void *ctx, esp_event_base_t ev_base,
   struct mgos_wifi_dev_event_info dei = {0};
   switch (ev_id) {
     case WIFI_EVENT_STA_START: {
+      s_started = true;
       break;
     }
     case WIFI_EVENT_STA_STOP: {
+      s_started = false;
       mgos_wifi_dev_scan_cb(-2, NULL);
       break;
     }
@@ -190,14 +192,12 @@ out:
 static esp_err_t esp32_wifi_ensure_start(void) {
   esp_err_t r = ESP_OK;
   if (!s_started) {
-    s_started = false;
     s_connecting = false;
     r = esp_wifi_start();
     if (r != ESP_OK) {
       LOG(LL_ERROR, ("Failed to start WiFi: %d", r));
       goto out;
     }
-    s_started = true;
     wifi_ps_type_t cur_ps_mode = WIFI_PS_NONE;
     esp_wifi_get_ps(&cur_ps_mode);
     wifi_ps_type_t want_ps_mode =
@@ -248,7 +248,6 @@ out:
 static esp_err_t esp32_wifi_add_mode(wifi_mode_t mode) {
   esp_err_t r = ESP_OK;
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
-  LOG(LL_DEBUG, ("cur mode: %d", cur_mode));
   if (cur_mode == mode || cur_mode == WIFI_MODE_APSTA) {
     goto out;
   }
@@ -623,21 +622,20 @@ bool mgos_wifi_dev_start_scan(void) {
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
   if (cur_mode != WIFI_MODE_STA && cur_mode != WIFI_MODE_APSTA) {
     r = esp32_wifi_add_mode(WIFI_MODE_STA);
-    if (r == ESP_OK) r = esp_wifi_start();
+    if (r == ESP_OK) r = esp32_wifi_ensure_start();
   }
   if (r == ESP_OK) {
-    wifi_scan_config_t scan_cfg = {.ssid = NULL,
-                                   .bssid = NULL,
-                                   .channel = 0,
-                                   .show_hidden = false,
-                                   .scan_type = WIFI_SCAN_TYPE_ACTIVE,
-                                   .scan_time = {
-                                       .active =
-                                           {
-                                               .min = 10,
-                                               .max = 50,
-                                           },
-                                   }};
+    wifi_scan_config_t scan_cfg = {
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time =
+            {
+                .active =
+                    {
+                        .min = 150,
+                        .max = 200,
+                    },
+            },
+    };
     if (s_connecting) {
       esp_wifi_disconnect();
       s_connecting = false;
