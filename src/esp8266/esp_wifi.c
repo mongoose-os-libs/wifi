@@ -137,7 +137,7 @@ static bool mgos_wifi_set_mode(uint8_t mode) {
   } else {
     /* When AP is active, modem sleep is not active anyway. */
   }
-
+  (void) mode_str;
   return true;
 }
 
