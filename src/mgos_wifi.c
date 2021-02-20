@@ -29,6 +29,7 @@
 #include "mgos_net_hal.h"
 #include "mgos_sys_config.h"
 #include "mgos_system.h"
+#include "mgos_time.h"
 #include "mgos_timers.h"
 
 #include "mongoose.h"
@@ -45,7 +46,7 @@ static bool s_scan_in_progress = false;
 
 enum mgos_wifi_status s_sta_status = MGOS_WIFI_DISCONNECTED;
 static char *s_sta_ssid = NULL;
-static bool s_sta_should_reconnect = false;
+static int8_t s_sta_should_reconnect = 0;
 
 struct mgos_rlock_type *s_wifi_lock = NULL;
 
@@ -109,7 +110,7 @@ static void mgos_wifi_event_cb(void *arg) {
     case MGOS_WIFI_EV_STA_DISCONNECTED: {
       if ((s_sta_status == MGOS_WIFI_CONNECTED ||
            s_sta_status == MGOS_WIFI_IP_ACQUIRED) &&
-          s_sta_should_reconnect) {
+          s_sta_should_reconnect == 1) {
         reconnect = s_sta_should_reconnect;
       }
       ev_arg = &dei->sta_disconnected;
@@ -173,7 +174,7 @@ static void mgos_wifi_event_cb(void *arg) {
 
   free(dei);
 
-  if (reconnect && s_sta_should_reconnect) {
+  if (reconnect && s_sta_should_reconnect == 1) {
     mgos_wifi_connect();
   }
 }
@@ -307,8 +308,9 @@ bool mgos_wifi_setup_ap(const struct mgos_config_wifi_ap *cfg) {
 }
 
 bool mgos_wifi_connect(void) {
+  if (s_sta_should_reconnect < 0) return false;
   wifi_lock();
-  s_sta_should_reconnect = true;
+  s_sta_should_reconnect = 1;
   bool ret = mgos_wifi_dev_sta_connect();
   if (ret) {
     struct mgos_wifi_dev_event_info dei = {
@@ -324,7 +326,9 @@ bool mgos_wifi_connect(void) {
 bool mgos_wifi_disconnect(void) {
   if (s_cur_sta_cfg_idx < 0) return false;  // Not inited.
   wifi_lock();
-  s_sta_should_reconnect = false;
+  if (s_sta_should_reconnect >= 0) {
+    s_sta_should_reconnect = 0;
+  }
   bool ret = true;
   if (s_sta_status != MGOS_WIFI_DISCONNECTED) {
     ret = mgos_wifi_dev_sta_disconnect();
@@ -489,8 +493,8 @@ bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {
  * Handler of DNS requests, it resolves mgos_sys_config_get_wifi_ap_hostname()
  * to the IP address of wifi AP (mgos_sys_config_get_wifi_ap_ip()).
  */
-static void dns_ev_handler(struct mg_connection *c, int ev, void *ev_data,
-                           void *user_data) {
+static void mgos_wifi_dns_ev_handler(struct mg_connection *c, int ev,
+                                     void *ev_data, void *user_data) {
   struct mg_dns_message *msg = (struct mg_dns_message *) ev_data;
   struct mbuf reply_buf;
   int i;
@@ -517,6 +521,26 @@ static void dns_ev_handler(struct mg_connection *c, int ev, void *ev_data,
   (void) user_data;
 }
 
+static void mgos_wifi_disconnect_cb(void *arg) {
+  mgos_wifi_disconnect();
+  s_sta_should_reconnect = -1;
+  (void) arg;
+}
+
+static void mgos_wifi_reboot_after_ev_handler(int ev, void *evd, void *cb_arg) {
+  const struct mgos_event_reboot_after_arg *arg =
+      (struct mgos_event_reboot_after_arg *) evd;
+  int64_t time_to_reboot_ms =
+      (arg->reboot_at_uptime_micros - mgos_uptime_micros()) / 1000;
+  if (time_to_reboot_ms > 50) {
+    mgos_set_timer(time_to_reboot_ms - 50, 0, mgos_wifi_disconnect_cb, NULL);
+  } else {
+    mgos_wifi_disconnect_cb(NULL);
+  }
+  (void) ev;
+  (void) cb_arg;
+}
+
 bool mgos_wifi_init(void) {
   s_wifi_lock = mgos_rlock_create();
   mgos_event_register_base(MGOS_WIFI_EV_BASE, "wifi");
@@ -534,9 +558,12 @@ bool mgos_wifi_init(void) {
     char buf[50];
     sprintf(buf, "udp://%s:53", mgos_sys_config_get_wifi_ap_ip());
     struct mg_connection *dns_conn =
-        mg_bind(mgos_get_mgr(), buf, dns_ev_handler, 0);
+        mg_bind(mgos_get_mgr(), buf, mgos_wifi_dns_ev_handler, 0);
     mg_set_protocol_dns(dns_conn);
   }
+
+  mgos_event_add_handler(MGOS_EVENT_REBOOT_AFTER,
+                         mgos_wifi_reboot_after_ev_handler, NULL);
 
   return true;
 }
