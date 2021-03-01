@@ -23,6 +23,7 @@
 #include <esp_common.h>
 #else
 #include <user_interface.h>
+#include "version.h"
 #if MGOS_ESP8266_WIFI_ENABLE_WPAENT
 #include <wpa2_enterprise.h>
 #endif
@@ -175,7 +176,11 @@ static bool mgos_wifi_remove_mode(uint8_t mode) {
 
 bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   struct station_config sta_cfg = {
-      .all_channel_scan = mgos_sys_config_get_wifi_sta_all_chan_scan(),
+#if ESP_SDK_VERSION_MAJOR >= 3
+    .all_channel_scan = mgos_sys_config_get_wifi_sta_all_chan_scan(),
+#else
+    0
+#endif
   };
 
   if (!cfg->enable) {
