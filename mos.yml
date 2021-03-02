@@ -80,6 +80,8 @@ conds:
 
   - when: mos.platform == "esp8266"
     apply:
+      libs:
+        - origin: https://github.com/mongoose-os-libs/lwip
       config_schema:
         - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
         - ["wifi.sta_all_chan_scan", "b", true, {title: "true to scan all channels or false to perform fast scan"}]
