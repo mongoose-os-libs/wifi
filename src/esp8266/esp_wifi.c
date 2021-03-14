@@ -174,6 +174,67 @@ static bool mgos_wifi_remove_mode(uint8_t mode) {
   return mgos_wifi_set_mode(mode);
 }
 
+static void esp_wifi_set_rate_limits(const struct mgos_config_wifi *cfg) {
+  bool enable_rate_limit = false, valid_rate_limit = true;
+  {  // Limits for 11b
+    uint8_t limit_11b_max = RATE_11B_B11M, limit_11b_min = RATE_11B_B1M;
+    if (cfg->tx_rate_limit_11b != -1) {
+      limit_11b_max = (uint8_t)(cfg->tx_rate_limit_11b >> 8);
+      limit_11b_min = (uint8_t)(cfg->tx_rate_limit_11b);
+      enable_rate_limit = true;
+    }
+    LOG(LL_DEBUG, ("%s %s %d - %d", "Set", "rate_limit_11b", limit_11b_max,
+                   limit_11b_min));
+    if (!wifi_set_user_rate_limit(RC_LIMIT_11B, STATION_IF, limit_11b_max,
+                                  limit_11b_min)) {
+      LOG(LL_ERROR, ("%s %s %d - %d", "Invalid", "rate_limit_11b",
+                     limit_11b_max, limit_11b_min));
+      valid_rate_limit = false;
+    }
+  }
+  {  // Limits for 11g
+    uint8_t limit_11g_max = RATE_11G_G54M, limit_11g_min = RATE_11G_B1M;
+    if (cfg->tx_rate_limit_11g != -1) {
+      limit_11g_max = (uint8_t)(cfg->tx_rate_limit_11g >> 8);
+      limit_11g_min = (uint8_t)(cfg->tx_rate_limit_11g);
+      enable_rate_limit = true;
+    }
+    LOG(LL_DEBUG, ("%s %s %d - %d", "Set", "rate_limit_11g", limit_11g_max,
+                   limit_11g_min));
+    if (!wifi_set_user_rate_limit(RC_LIMIT_11G, STATION_IF, limit_11g_max,
+                                  limit_11g_min)) {
+      LOG(LL_ERROR, ("%s %s %d - %d", "Invalid", "rate_limit_11g",
+                     limit_11g_max, limit_11g_min));
+      valid_rate_limit = false;
+    }
+  }
+  {  // Limits for 11n
+    uint8_t limit_11n_max = RATE_11N_MCS7S, limit_11n_min = RATE_11N_B1M;
+    if (cfg->tx_rate_limit_11n != -1) {
+      limit_11n_max = (uint8_t)(cfg->tx_rate_limit_11n >> 8);
+      limit_11n_min = (uint8_t)(cfg->tx_rate_limit_11n);
+      enable_rate_limit = true;
+    }
+    LOG(LL_DEBUG, ("%s %s %d - %d", "Set", "rate_limit_11n", limit_11n_max,
+                   limit_11n_min));
+    if (!wifi_set_user_rate_limit(RC_LIMIT_11N, STATION_IF, limit_11n_max,
+                                  limit_11n_min)) {
+      LOG(LL_ERROR, ("%s %s %d - %d", "Invalid", "rate_limit_11n",
+                     limit_11n_max, limit_11n_min));
+      valid_rate_limit = false;
+    }
+  }
+  uint8_t limit_mask = wifi_get_user_limit_rate_mask();
+  if (enable_rate_limit && valid_rate_limit) {
+    limit_mask |= LIMIT_RATE_MASK_STA;
+  } else {
+    limit_mask &= ~LIMIT_RATE_MASK_STA;
+  }
+  if (!wifi_set_user_limit_rate_mask(limit_mask)) {
+    LOG(LL_ERROR, ("wifi_set_user_limit_rate_mask failed"));
+  }
+}
+
 bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   struct station_config sta_cfg = {
 #if ESP_SDK_VERSION_MAJOR >= 3
@@ -187,9 +248,11 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     return mgos_wifi_remove_mode(STATION_MODE);
   }
 
-  if (!mgos_wifi_add_mode(STATION_MODE)) return false;
-
   wifi_station_disconnect();
+
+  esp_wifi_set_rate_limits(mgos_sys_config_get_wifi());
+
+  if (!mgos_wifi_add_mode(STATION_MODE)) return false;
 
   sta_cfg.bssid_set = 0;
   strncpy((char *) sta_cfg.ssid, cfg->ssid, sizeof(sta_cfg.ssid));
@@ -306,6 +369,8 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   if (!cfg->enable) {
     return mgos_wifi_remove_mode(SOFTAP_MODE);
   }
+
+  esp_wifi_set_rate_limits(mgos_sys_config_get_wifi());
 
   if (!mgos_wifi_add_mode(SOFTAP_MODE)) return false;
 
