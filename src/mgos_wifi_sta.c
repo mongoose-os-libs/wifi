@@ -284,10 +284,10 @@ static void mgos_wifi_sta_build_queue(int num_res,
     }
     LOG(LL_DEBUG,
         ("  %d: SSID: %-32s, BSSID: %02x:%02x:%02x:%02x:%02x:%02x "
-         "auth: %d, ch: %3d, RSSI: %2d att %d - %d %s %p",
+         "auth: %d, ch: %3d, RSSI: %2d att %d - %d %s",
          i, e->ssid, e->bssid[0], e->bssid[1], e->bssid[2], e->bssid[3],
          e->bssid[4], e->bssid[5], e->auth_mode, e->channel, e->rssi,
-         (eape ? eape->num_attempts : -1), ok, reason, eape));
+         (eape ? eape->num_attempts : -1), ok, reason));
     (void) reason;
   }
 }
@@ -371,7 +371,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
       struct wifi_ap_entry *ape = SLIST_FIRST(&s_ap_queue);
       if (s_roaming) {
         s_roaming = false;
-        // If we are roaming and have no good candidate, go back.
+        /* If we are roaming and have no good candidate, go back. */
         int cur_rssi = mgos_wifi_sta_get_rssi();
         bool ok = false;
         if (ape == NULL) {
@@ -391,13 +391,13 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
           set_timeout(true /* run_now */);
           break;
         }
-        // We have a better AP candidate, disconnect and try to roam.
+        /* We have a better AP candidate, disconnect and try to roam. */
         char bssid_s[20];
         LOG(LL_INFO, ("Trying to switch to %s (RSSI %d -> %d)",
                       mgos_wifi_sta_bssid_to_str(ape->bssid, bssid_s), cur_rssi,
                       ape->rssi));
         mgos_wifi_dev_sta_disconnect();
-        // We need to allow some time for connection to terminate.
+        /* We need to allow some time for connection to terminate. */
         s_cur_entry = NULL;
         s_state = WIFI_STA_WAIT_CONNECT;
         set_timeout_n(1000, false /* run_now */);
@@ -410,6 +410,16 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         break;
       }
       ape->num_attempts++;
+      if (ape->num_attempts >= 200) {
+        /* Prevent overflow by scaling down the numbers. */
+        struct wifi_ap_entry *ape2 = NULL;
+        SLIST_FOREACH(ape2, &s_ap_queue, next) {
+          ape2->num_attempts /= 2;
+        }
+        SLIST_FOREACH(ape2, &s_ap_history, next) {
+          ape2->num_attempts /= 2;
+        }
+      }
       uint8_t *bssid = &ape->bssid[0];
       LOG(LL_INFO,
           ("Trying %s AP %02x:%02x:%02x:%02x:%02x:%02x RSSI %d attempt %d",
@@ -451,7 +461,6 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         struct wifi_ap_entry *ape = SLIST_FIRST(&s_ap_queue);
         ape->num_attempts = 0;
         mgos_wifi_sta_empty_queue();
-        s_last_roam_attempt = mgos_uptime_micros();
         s_state = WIFI_STA_IP_ACQUIRED;
         break;
       }
