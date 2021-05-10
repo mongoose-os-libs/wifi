@@ -304,8 +304,7 @@ static esp_err_t wifi_sta_set_host_name(
 bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   bool result = false;
   esp_err_t r;
-  wifi_config_t wcfg;
-  memset(&wcfg, 0, sizeof(wcfg));
+  wifi_config_t wcfg = {0};
   wifi_sta_config_t *stacfg = &wcfg.sta;
 
   s_user_sta_enabled = cfg->enable;
@@ -321,10 +320,21 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   /* In case already connected, disconnect. */
   esp_wifi_disconnect();
 
-  stacfg->scan_method =
-      (wifi_scan_method_t) mgos_sys_config_get_wifi_sta_all_chan_scan();
-
   strncpy((char *) stacfg->ssid, cfg->ssid, sizeof(stacfg->ssid));
+
+  if (!mgos_conf_str_empty(cfg->bssid)) {
+    unsigned int bssid[6] = {0};
+    if (sscanf(cfg->bssid, "%02x:%02x:%02x:%02x:%02x:%02x", &bssid[0],
+               &bssid[1], &bssid[2], &bssid[3], &bssid[4], &bssid[5]) != 6) {
+      LOG(LL_ERROR, ("Invalid BSSID!"));
+      return false;
+    }
+    for (int i = 0; i < 6; i++) {
+      stacfg->bssid[i] = bssid[i];
+    }
+    stacfg->bssid_set = true;
+  }
+
   if (mgos_conf_str_empty(cfg->user) /* Not using EAP */ &&
       !mgos_conf_str_empty(cfg->pass)) {
     strncpy((char *) stacfg->password, cfg->pass, sizeof(stacfg->password));
@@ -618,23 +628,13 @@ int mgos_wifi_sta_get_rssi(void) {
 }
 
 bool mgos_wifi_dev_start_scan(void) {
-  esp_err_t r = ESP_OK;
-  wifi_mode_t cur_mode = esp32_wifi_get_mode();
-  if (cur_mode != WIFI_MODE_STA && cur_mode != WIFI_MODE_APSTA) {
-    r = esp32_wifi_add_mode(WIFI_MODE_STA);
-    if (r == ESP_OK) r = esp32_wifi_ensure_start();
-  }
+  esp_err_t r = esp32_wifi_add_mode(WIFI_MODE_STA);
+  if (r == ESP_OK) r = esp32_wifi_ensure_start();
   if (r == ESP_OK) {
     wifi_scan_config_t scan_cfg = {
         .scan_type = WIFI_SCAN_TYPE_ACTIVE,
-        .scan_time =
-            {
-                .active =
-                    {
-                        .min = 150,
-                        .max = 200,
-                    },
-            },
+        .scan_time.active.min = 100,
+        .scan_time.active.max = 150,
     };
     if (s_connecting) {
       esp_wifi_disconnect();

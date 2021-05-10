@@ -34,7 +34,7 @@
 
 #include "mongoose.h"
 
-#define NUM_STA_CFG 3
+#include "mgos_wifi_sta.h"
 
 struct cb_info {
   void *cb;
@@ -44,90 +44,36 @@ struct cb_info {
 static SLIST_HEAD(s_scan_cbs, cb_info) s_scan_cbs;
 static bool s_scan_in_progress = false;
 
-enum mgos_wifi_status s_sta_status = MGOS_WIFI_DISCONNECTED;
-static char *s_sta_ssid = NULL;
-static int8_t s_sta_should_reconnect = 0;
-
 struct mgos_rlock_type *s_wifi_lock = NULL;
 
-static int s_cur_sta_cfg_idx = -1;
-static struct mgos_config_wifi *s_cur_cfg = NULL;
-static mgos_timer_id s_connect_timer_id = MGOS_INVALID_TIMER_ID;
-
-static inline void wifi_lock(void) {
+void wifi_lock(void) {
   mgos_rlock(s_wifi_lock);
 }
 
-static inline void wifi_unlock(void) {
+void wifi_unlock(void) {
   mgos_runlock(s_wifi_lock);
 }
 
-static const struct mgos_config_wifi_sta *mgos_wifi_get_sta_cfg(
-    const struct mgos_config_wifi *cfg, int idx) {
-  if (cfg == NULL) return NULL;
-  switch (idx) {
-    case 0:
-      return &cfg->sta;
-    case 1:
-      return &cfg->sta1;
-    case 2:
-      return &cfg->sta2;
-  }
-  return NULL;
-}
-
-static int mgos_wifi_get_next_sta_cfg_idx(const struct mgos_config_wifi *cfg,
-                                          int start) {
-  if (cfg == NULL) return -1;
-  int idx = start;
-  char *msg = NULL;
-  do {
-    const struct mgos_config_wifi_sta *sta_cfg =
-        mgos_wifi_get_sta_cfg(cfg, idx);
-    if (sta_cfg && sta_cfg->enable) {
-      if (mgos_wifi_validate_sta_cfg(sta_cfg, &msg)) {
-        LOG(LL_INFO, ("WiFi STA: Using config %d (%s)", idx, sta_cfg->ssid));
-        return idx;
-      } else {
-        free(msg);
-        msg = NULL;
-      }
-    }
-    idx = (idx + 1) % NUM_STA_CFG;
-  } while (idx != start);
-  return -1;
-}
-
-static void mgos_wifi_sta_connect_timeout_timer_cb(void *arg);
-
 static void mgos_wifi_event_cb(void *arg) {
-  bool reconnect = false, net_event = true;
+  bool net_event = true;
   struct mgos_wifi_dev_event_info *dei =
       (struct mgos_wifi_dev_event_info *) arg;
   void *ev_arg = NULL;
   enum mgos_net_event nev = MGOS_NET_EV_DISCONNECTED;
   switch (dei->ev) {
     case MGOS_WIFI_EV_STA_DISCONNECTED: {
-      if ((s_sta_status == MGOS_WIFI_CONNECTED ||
-           s_sta_status == MGOS_WIFI_IP_ACQUIRED) &&
-          s_sta_should_reconnect == 1) {
-        reconnect = s_sta_should_reconnect;
-      }
       ev_arg = &dei->sta_disconnected;
-      s_sta_status = MGOS_WIFI_DISCONNECTED;
       nev = MGOS_NET_EV_DISCONNECTED;
       LOG(LL_INFO,
           ("WiFi STA: Disconnected, reason: %d", dei->sta_disconnected.reason));
       break;
     }
     case MGOS_WIFI_EV_STA_CONNECTING: {
-      s_sta_status = MGOS_WIFI_CONNECTING;
       nev = MGOS_NET_EV_CONNECTING;
       break;
     }
     case MGOS_WIFI_EV_STA_CONNECTED: {
       ev_arg = &dei->sta_connected;
-      s_sta_status = MGOS_WIFI_CONNECTED;
       nev = MGOS_NET_EV_CONNECTED;
       struct mgos_wifi_sta_connected_arg *ea = &dei->sta_connected;
       ea->rssi = mgos_wifi_sta_get_rssi();
@@ -138,16 +84,6 @@ static void mgos_wifi_event_cb(void *arg) {
       break;
     }
     case MGOS_WIFI_EV_STA_IP_ACQUIRED: {
-      s_sta_status = MGOS_WIFI_IP_ACQUIRED;
-      mgos_clear_timer(s_connect_timer_id);
-      s_connect_timer_id = MGOS_INVALID_TIMER_ID;
-      if (s_cur_cfg && s_cur_cfg->sta_cfg_idx != s_cur_sta_cfg_idx) {
-        LOG(LL_INFO, ("WiFi STA: New current config: %d", s_cur_sta_cfg_idx));
-        s_cur_cfg->sta_cfg_idx = s_cur_sta_cfg_idx;
-        if (s_cur_cfg == mgos_sys_config_get_wifi()) {
-          save_cfg(&mgos_sys_config, NULL);
-        }
-      }
       nev = MGOS_NET_EV_IP_ACQUIRED;
       break;
     }
@@ -173,10 +109,6 @@ static void mgos_wifi_event_cb(void *arg) {
   }
 
   free(dei);
-
-  if (reconnect && s_sta_should_reconnect == 1) {
-    mgos_wifi_connect();
-  }
 }
 
 void mgos_wifi_dev_event_cb(const struct mgos_wifi_dev_event_info *dei) {
@@ -247,36 +179,20 @@ static bool validate_wifi_cfg(const struct mgos_config *cfg, char **msg) {
           mgos_wifi_validate_sta_cfg(&cfg->wifi.sta, msg));
 }
 
-static void set_reconnect_timer(void) {
-  if (s_cur_cfg == NULL || s_cur_sta_cfg_idx < 0 ||
-      s_cur_cfg->sta_connect_timeout <= 0 ||
-      s_connect_timer_id != MGOS_INVALID_TIMER_ID) {
-    return;
-  }
-  s_connect_timer_id =
-      mgos_set_timer(s_cur_cfg->sta_connect_timeout * 1000, 0,
-                     mgos_wifi_sta_connect_timeout_timer_cb, NULL);
-}
-
 bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
+  int ret = true;
   char *err_msg = NULL;
   if (!mgos_wifi_validate_sta_cfg(cfg, &err_msg)) {
     LOG(LL_ERROR, ("WiFi STA: %s", err_msg));
     free(err_msg);
     return false;
   }
-  wifi_lock();
-  bool ret = mgos_wifi_dev_sta_setup(cfg);
+  mgos_wifi_sta_clear_cfgs();
+  ret = mgos_wifi_sta_add_cfg(cfg);
   if (ret && cfg->enable) {
     LOG(LL_INFO, ("WiFi STA: Connecting to %s", cfg->ssid));
-    free(s_sta_ssid);
-    s_sta_ssid = strdup(cfg->ssid);
     ret = mgos_wifi_connect();
-  } else {
-    set_reconnect_timer();
   }
-  if (ret) s_cur_cfg = NULL;
-  wifi_unlock();
   return ret;
 }
 
@@ -305,84 +221,6 @@ bool mgos_wifi_setup_ap(const struct mgos_config_wifi_ap *cfg) {
                    NULL);
   }
   return ret;
-}
-
-bool mgos_wifi_connect(void) {
-  if (s_sta_should_reconnect < 0) return false;
-  wifi_lock();
-  s_sta_should_reconnect = 1;
-  bool ret = mgos_wifi_dev_sta_connect();
-  if (ret) {
-    struct mgos_wifi_dev_event_info dei = {
-        .ev = MGOS_WIFI_EV_STA_CONNECTING,
-    };
-    mgos_wifi_dev_event_cb(&dei);
-  }
-  set_reconnect_timer();
-  wifi_unlock();
-  return ret;
-}
-
-bool mgos_wifi_disconnect(void) {
-  if (s_cur_sta_cfg_idx < 0) return false;  // Not inited.
-  wifi_lock();
-  if (s_sta_should_reconnect >= 0) {
-    s_sta_should_reconnect = 0;
-  }
-  bool ret = true;
-  if (s_sta_status != MGOS_WIFI_DISCONNECTED) {
-    ret = mgos_wifi_dev_sta_disconnect();
-  }
-  if (ret) {
-    mgos_clear_timer(s_connect_timer_id);
-    s_connect_timer_id = MGOS_INVALID_TIMER_ID;
-  }
-  wifi_unlock();
-  return ret;
-}
-
-static void mgos_wifi_sta_connect_timeout_timer_cb(void *arg) {
-  wifi_lock();
-  int new_idx = -1;
-  struct mgos_config_wifi *cfg = s_cur_cfg;
-  s_connect_timer_id = MGOS_INVALID_TIMER_ID;
-  LOG(LL_ERROR, ("WiFi STA: Connect timeout"));
-  if (cfg == NULL) goto out;
-  new_idx = mgos_wifi_get_next_sta_cfg_idx(
-      cfg, (s_cur_sta_cfg_idx + 1) % NUM_STA_CFG);
-  /* Note: even if the config didn't change, disconnect and
-   * reconnect to re-init WiFi. */
-  mgos_wifi_disconnect();
-  mgos_wifi_setup_sta(mgos_wifi_get_sta_cfg(cfg, new_idx));
-  s_cur_cfg = cfg;
-  s_cur_sta_cfg_idx = new_idx;
-out:
-  wifi_unlock();
-  (void) arg;
-}
-
-enum mgos_wifi_status mgos_wifi_get_status(void) {
-  return s_sta_status;
-}
-
-char *mgos_wifi_get_status_str(void) {
-  const char *s = NULL;
-  enum mgos_wifi_status st = mgos_wifi_get_status();
-  switch (st) {
-    case MGOS_WIFI_DISCONNECTED:
-      s = "disconnected";
-      break;
-    case MGOS_WIFI_CONNECTING:
-      s = "connecting";
-      break;
-    case MGOS_WIFI_CONNECTED:
-      s = "connected";
-      break;
-    case MGOS_WIFI_IP_ACQUIRED:
-      s = "got ip";
-      break;
-  }
-  return (s != NULL ? strdup(s) : NULL);
 }
 
 struct scan_result_info {
@@ -434,10 +272,6 @@ void mgos_wifi_scan(mgos_wifi_scan_cb_t cb, void *arg) {
   wifi_unlock();
 }
 
-char *mgos_wifi_get_connected_ssid(void) {
-  return (s_sta_status == MGOS_WIFI_IP_ACQUIRED ? strdup(s_sta_ssid) : NULL);
-}
-
 bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {
   bool result = false, trigger_ap = false;
   int gpio = cfg->ap.trigger_on_gpio;
@@ -451,9 +285,9 @@ bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {
   const struct mgos_config_wifi_ap dummy_ap_cfg = {.enable = false};
   const struct mgos_config_wifi_sta dummy_sta_cfg = {.enable = false};
 
-  int sta_cfg_idx = mgos_wifi_get_next_sta_cfg_idx(cfg, cfg->sta_cfg_idx);
-  const struct mgos_config_wifi_sta *sta_cfg =
-      mgos_wifi_get_sta_cfg(cfg, sta_cfg_idx);
+  const struct mgos_config_wifi_sta *sta_cfg = mgos_sys_config_get_wifi_sta();
+  const struct mgos_config_wifi_sta *sta_cfg1 = mgos_sys_config_get_wifi_sta1();
+  const struct mgos_config_wifi_sta *sta_cfg2 = mgos_sys_config_get_wifi_sta2();
 
   if (trigger_ap || (cfg->ap.enable && sta_cfg == NULL)) {
     struct mgos_config_wifi_ap ap_cfg;
@@ -468,23 +302,21 @@ bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {
     LOG(LL_INFO, ("WiFi mode: %s", "AP+STA"));
     result = (mgos_wifi_setup_ap(&cfg->ap) && mgos_wifi_setup_sta(sta_cfg));
 #endif
-  } else if (sta_cfg != NULL) {
+  } else if (sta_cfg->enable || sta_cfg1->enable || sta_cfg2->enable) {
     LOG(LL_INFO, ("WiFi mode: %s", "STA"));
     /* Disable AP if it was enabled. */
     mgos_wifi_setup_ap(&dummy_ap_cfg);
-    result = mgos_wifi_setup_sta(sta_cfg);
+    mgos_wifi_sta_clear_cfgs();
+    result |= mgos_wifi_sta_add_cfg(sta_cfg);
+    result |= mgos_wifi_sta_add_cfg(sta_cfg1);
+    result |= mgos_wifi_sta_add_cfg(sta_cfg2);
+    if (result) mgos_wifi_connect();
   } else {
     LOG(LL_INFO, ("WiFi mode: %s", "off"));
     mgos_wifi_setup_sta(&dummy_sta_cfg);
     mgos_wifi_setup_ap(&dummy_ap_cfg);
     result = true;
   }
-
-  s_cur_cfg = cfg;
-  s_cur_sta_cfg_idx = sta_cfg_idx;
-  mgos_clear_timer(s_connect_timer_id);
-  s_connect_timer_id = MGOS_INVALID_TIMER_ID;
-  set_reconnect_timer();
 
   return result;
 }
@@ -521,26 +353,6 @@ static void mgos_wifi_dns_ev_handler(struct mg_connection *c, int ev,
   (void) user_data;
 }
 
-static void mgos_wifi_disconnect_cb(void *arg) {
-  mgos_wifi_disconnect();
-  s_sta_should_reconnect = -1;
-  (void) arg;
-}
-
-static void mgos_wifi_reboot_after_ev_handler(int ev, void *evd, void *cb_arg) {
-  const struct mgos_event_reboot_after_arg *arg =
-      (struct mgos_event_reboot_after_arg *) evd;
-  int64_t time_to_reboot_ms =
-      (arg->reboot_at_uptime_micros - mgos_uptime_micros()) / 1000;
-  if (time_to_reboot_ms > 50) {
-    mgos_set_timer(time_to_reboot_ms - 50, 0, mgos_wifi_disconnect_cb, NULL);
-  } else {
-    mgos_wifi_disconnect_cb(NULL);
-  }
-  (void) ev;
-  (void) cb_arg;
-}
-
 bool mgos_wifi_init(void) {
   s_wifi_lock = mgos_rlock_create();
   mgos_event_register_base(MGOS_WIFI_EV_BASE, "wifi");
@@ -562,9 +374,7 @@ bool mgos_wifi_init(void) {
     mg_set_protocol_dns(dns_conn);
   }
 
-  mgos_event_add_handler(MGOS_EVENT_REBOOT_AFTER,
-                         mgos_wifi_reboot_after_ev_handler, NULL);
-
+  mgos_wifi_sta_init();
   return true;
 }
 
