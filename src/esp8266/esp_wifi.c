@@ -236,13 +236,7 @@ static void esp_wifi_set_rate_limits(const struct mgos_config_wifi *cfg) {
 }
 
 bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
-  struct station_config sta_cfg = {
-#if ESP_SDK_VERSION_MAJOR >= 3
-    .all_channel_scan = mgos_sys_config_get_wifi_sta_all_chan_scan(),
-#else
-    0
-#endif
-  };
+  struct station_config sta_cfg = {0};
 
   if (!cfg->enable) {
     return mgos_wifi_remove_mode(STATION_MODE);
@@ -254,7 +248,18 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
 
   if (!mgos_wifi_add_mode(STATION_MODE)) return false;
 
-  sta_cfg.bssid_set = 0;
+  if (cfg->bssid != NULL) {
+    unsigned int bssid[6] = {0};
+    if (sscanf(cfg->bssid, "%02x:%02x:%02x:%02x:%02x:%02x", &bssid[0],
+               &bssid[1], &bssid[2], &bssid[3], &bssid[4], &bssid[5]) != 6) {
+      LOG(LL_ERROR, ("Invalid BSSID!"));
+      return false;
+    }
+    for (int i = 0; i < 6; i++) {
+      sta_cfg.bssid[i] = bssid[i];
+    }
+    sta_cfg.bssid_set = true;
+  }
   strncpy((char *) sta_cfg.ssid, cfg->ssid, sizeof(sta_cfg.ssid));
 
   if (!mgos_conf_str_empty(cfg->ip) && !mgos_conf_str_empty(cfg->netmask)) {
@@ -470,19 +475,23 @@ void wifi_scan_done(void *arg, STATUS status) {
     mgos_wifi_dev_scan_cb(-1, NULL);
     return;
   }
-  STAILQ_HEAD(, bss_info) *info = arg;
-  struct mgos_wifi_scan_result *res = NULL;
-  struct bss_info *p;
   int n = 0;
-  STAILQ_FOREACH(p, info, next) n++;
-  res = calloc(n, sizeof(*res));
-  if (n > 0 && res == NULL) {
+  struct bss_info *info = (struct bss_info *) arg;
+  for (struct bss_info *p = info; p != NULL; p = p->next.stqe_next) {
+    n++;
+  }
+  if (n == 0) {
+    mgos_wifi_dev_scan_cb(0, NULL);
+    return;
+  }
+  struct mgos_wifi_scan_result *res = calloc(n, sizeof(*res));
+  if (res == NULL) {
     LOG(LL_ERROR, ("Out of memory"));
     mgos_wifi_dev_scan_cb(-1, NULL);
     return;
   }
   struct mgos_wifi_scan_result *r = res;
-  STAILQ_FOREACH(p, info, next) {
+  for (struct bss_info *p = info; p != NULL; p = p->next.stqe_next) {
     strncpy(r->ssid, (const char *) p->ssid, sizeof(r->ssid));
     memcpy(r->bssid, p->bssid, sizeof(r->bssid));
     r->ssid[sizeof(r->ssid) - 1] = '\0';
@@ -514,10 +523,13 @@ void wifi_scan_done(void *arg, STATUS status) {
 
 bool mgos_wifi_dev_start_scan(void) {
   /* Scanning requires station. If in AP-only mode, switch to AP+STA. */
-  if (wifi_get_opmode() == SOFTAP_MODE) {
-    wifi_set_opmode_current(STATIONAP_MODE);
-  }
-  return wifi_station_scan(NULL, wifi_scan_done);
+  if (!mgos_wifi_add_mode(STATION_MODE)) return false;
+  struct scan_config cfg = {
+      .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+      .scan_time.active.min = 100,
+      .scan_time.active.max = 150,
+  };
+  return wifi_station_scan(&cfg, wifi_scan_done);
 }
 
 void mgos_wifi_dev_init(void) {

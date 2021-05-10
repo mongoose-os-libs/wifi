@@ -138,6 +138,7 @@ static bool ensure_role_sta(void) {
   if (s_current_role == ROLE_STA) return true;
   if (!restart_nwp(ROLE_STA)) return false;
   _u32 scan_interval = WIFI_SCAN_INTERVAL_SECONDS;
+  /* Setting scan policy also initiates scan. */
   sl_WlanPolicySet(SL_WLAN_POLICY_SCAN, 1 /* enable */, (_u8 *) &scan_interval,
                    sizeof(scan_interval));
   return true;
@@ -619,6 +620,9 @@ bool mgos_wifi_dev_start_scan(void) {
   SlWlanNetworkEntry_t info[2];
 
   if (!ensure_role_sta()) goto out;
+
+  /* TODO: Set scan policy to initate scan, right now we are getting
+   * results from a previous scan. */
 
   for (i = 0; (n = sl_WlanGetNetworkList(i, 2, info)) > 0; i += 2) {
     res = (struct mgos_wifi_scan_result *) realloc(

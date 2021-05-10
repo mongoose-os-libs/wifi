@@ -40,9 +40,7 @@ which contains configuration settings for the Access Point mode, and
 
 #### Multiple Station Configurations
 
-Station configurations will be tried starting from `sta_cfg_idx` and each one that is enabled will be given `sta_connect_timeout` seconds to connect. Successfully connected station's index will be saved in `sta_cfg_idx` so next boot will start with previously used configuration.
-
-Setting `sta_connect_timeout` to 0 disables this logic.
+Up to 3 different station configurations are allowed and those that are enabled will be considered for connection.
 
 ### Access Point configuration
 
