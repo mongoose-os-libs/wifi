@@ -78,6 +78,10 @@ static SLIST_HEAD(s_ap_queue, wifi_ap_entry) s_ap_queue;
 static SLIST_HEAD(s_ap_history, wifi_ap_entry) s_ap_history;
 static int64_t s_last_roam_attempt = 0;
 static bool s_roaming = false;
+static union {
+  int8_t samples[4];
+  uint32_t val;
+} s_rssi_info;
 
 static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout);
 
@@ -378,7 +382,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
           LOG(LL_DEBUG, ("No alternative APs found"));
         } else if (s_cur_entry != NULL && memcmp(s_cur_entry->bssid, ape->bssid,
                                                  sizeof(ape->bssid)) == 0) {
-          LOG(LL_DEBUG, ("Best AP is the same"));
+          LOG(LL_DEBUG, ("Current AP is best AP"));
         } else if (ape->rssi <= mgos_sys_config_get_wifi_sta_roam_rssi_thr() ||
                    (ape->rssi - MGOS_WIFI_STA_ROAM_RSSI_HYST) < cur_rssi) {
           LOG(LL_DEBUG, ("Best AP is not good enough (RSSI %d vs %d)",
@@ -462,6 +466,10 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         ape->num_attempts = 0;
         mgos_wifi_sta_empty_queue();
         s_state = WIFI_STA_IP_ACQUIRED;
+        int8_t cur_rssi = (int8_t) mgos_wifi_sta_get_rssi();
+        for (int i = 0; i < (int) ARRAY_SIZE(s_rssi_info.samples); i++) {
+          s_rssi_info.samples[i] = cur_rssi;
+        }
         break;
       }
       int cur_rssi = mgos_wifi_sta_get_rssi();
@@ -480,19 +488,27 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         set_timeout_n(1000, false /* run_now */);
         break;
       }
-      if (cur_rssi < mgos_sys_config_get_wifi_sta_roam_rssi_thr()) {
-        if (mgos_uptime_micros() - s_last_roam_attempt >
-            mgos_sys_config_get_wifi_sta_roam_interval() * 1000000) {
+      int roam_rssi_thr = mgos_sys_config_get_wifi_sta_roam_rssi_thr();
+      int roam_intvl = mgos_sys_config_get_wifi_sta_roam_interval();
+      if (roam_rssi_thr < 0 && roam_intvl > 0) {
+        s_rssi_info.val <<= 8;
+        s_rssi_info.samples[0] = cur_rssi;
+        int sum = 0;
+        for (int i = 0; i < (int) ARRAY_SIZE(s_rssi_info.samples); i++) {
+          sum += s_rssi_info.samples[i];
+        }
+        int avg_rssi = sum / (int) ARRAY_SIZE(s_rssi_info.samples);
+        int64_t now = mgos_uptime_micros();
+        if (avg_rssi < roam_rssi_thr &&
+            (now - s_last_roam_attempt > roam_intvl * 1000000)) {
           LOG(LL_INFO,
               ("Current RSSI %d, will scan for a better AP", cur_rssi));
           s_roaming = true;
           s_state = WIFI_STA_SCAN;
           set_timeout(true /* run_now */);
           s_last_roam_attempt = mgos_uptime_micros();
-          break;
         }
       }
-      break;
     }
     case WIFI_STA_SHUTDOWN:
       break;
