@@ -180,7 +180,7 @@ static bool validate_wifi_cfg(const struct mgos_config *cfg, char **msg) {
 }
 
 bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
-  int ret = true;
+  int ret = false;
   char *err_msg = NULL;
   if (!mgos_wifi_validate_sta_cfg(cfg, &err_msg)) {
     LOG(LL_ERROR, ("WiFi STA: %s", err_msg));
@@ -188,10 +188,14 @@ bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
     return false;
   }
   mgos_wifi_sta_clear_cfgs();
-  ret = mgos_wifi_sta_add_cfg(cfg);
-  if (ret && cfg->enable) {
-    LOG(LL_INFO, ("WiFi STA: Connecting to %s", cfg->ssid));
-    ret = mgos_wifi_connect();
+  if (cfg->enable) {
+    ret = mgos_wifi_sta_add_cfg(cfg);
+    if (ret) {
+      ret = mgos_wifi_connect();
+    }
+  } else {
+    mgos_wifi_disconnect();
+    ret = true;
   }
   return ret;
 }
@@ -288,8 +292,9 @@ bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {
   const struct mgos_config_wifi_sta *sta_cfg = mgos_sys_config_get_wifi_sta();
   const struct mgos_config_wifi_sta *sta_cfg1 = mgos_sys_config_get_wifi_sta1();
   const struct mgos_config_wifi_sta *sta_cfg2 = mgos_sys_config_get_wifi_sta2();
+  bool sta_enabled = (sta_cfg->enable || sta_cfg1->enable || sta_cfg2->enable);
 
-  if (trigger_ap || (cfg->ap.enable && sta_cfg == NULL)) {
+  if (trigger_ap || (cfg->ap.enable && !sta_enabled)) {
     struct mgos_config_wifi_ap ap_cfg;
     memcpy(&ap_cfg, &cfg->ap, sizeof(ap_cfg));
     ap_cfg.enable = true;
@@ -298,11 +303,19 @@ bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {
     mgos_wifi_setup_sta(&dummy_sta_cfg);
     result = mgos_wifi_setup_ap(&ap_cfg);
 #ifdef MGOS_WIFI_ENABLE_AP_STA /* ifdef-ok */
-  } else if (cfg->ap.enable && sta_cfg != NULL && cfg->ap.keep_enabled) {
+  } else if (cfg->ap.enable && sta_enabled) {
     LOG(LL_INFO, ("WiFi mode: %s", "AP+STA"));
-    result = (mgos_wifi_setup_ap(&cfg->ap) && mgos_wifi_setup_sta(sta_cfg));
+    result = mgos_wifi_setup_ap(&cfg->ap);
+    mgos_wifi_sta_clear_cfgs();
+    bool sta_result = mgos_wifi_sta_add_cfg(sta_cfg);
+    sta_result |= mgos_wifi_sta_add_cfg(sta_cfg1);
+    sta_result |= mgos_wifi_sta_add_cfg(sta_cfg2);
+    if (sta_result) {
+      sta_result = mgos_wifi_connect();
+    }
+    result |= sta_result;
 #endif
-  } else if (sta_cfg->enable || sta_cfg1->enable || sta_cfg2->enable) {
+  } else if (sta_enabled) {
     LOG(LL_INFO, ("WiFi mode: %s", "STA"));
     /* Disable AP if it was enabled. */
     mgos_wifi_setup_ap(&dummy_ap_cfg);
