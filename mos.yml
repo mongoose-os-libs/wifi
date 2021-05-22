@@ -53,7 +53,7 @@ config_schema:
   - ["wifi.sta_rssi_thr", "i", -95, {title: "Do not consider APs with weaker signal"}]
   - ["wifi.sta_connect_timeout", "i", 15, {title: "Timeout for connection, seconds"}]
   - ["wifi.sta_roam_rssi_thr", "i", -80, {title: "If connected to AP with weaker signal, try to find a better one."}]
-  - ["wifi.sta_roam_interval", "i", 900, {title: "Scan for better APs at this interval. Set to 0 to disable."}]
+  - ["wifi.sta_roam_interval", "i", 0, {title: "Scan for better APs at this interval. Set to positive number ot enable."}]
 
 build_vars:
   MGOS_WIFI_ENABLE_AP_STA: 0
