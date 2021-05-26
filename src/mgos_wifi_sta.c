@@ -678,6 +678,12 @@ char *mgos_wifi_get_connected_ssid(void) {
   return strdup(s_cur_entry->cfg->ssid);
 }
 
+const struct mgos_config_wifi_sta *mgos_wifi_get_connected_sta_cfg(void) {
+  if (s_cur_entry == NULL) return NULL;
+  return s_cur_entry->cfg;
+}
+
+
 void mgos_wifi_sta_init(void) {
   mgos_event_add_group_handler(MGOS_WIFI_EV_BASE, mgos_wifi_ev_handler, NULL);
   mgos_event_add_handler(MGOS_EVENT_REBOOT_AFTER,

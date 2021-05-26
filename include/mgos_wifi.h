@@ -177,6 +177,12 @@ char *mgos_wifi_get_status_str(void);
 char *mgos_wifi_get_connected_ssid(void);
 
 /*
+ * Get a `struct mgos_config_wifi_sta` to which we are currently connected
+ * or `NULL` if not connected.
+ */
+const struct mgos_config_wifi_sta *mgos_wifi_get_connected_sta_cfg(void);
+
+/*
  * Return default DNS server IP address. The caller should free it.
  */
 char *mgos_wifi_get_sta_default_dns(void);
