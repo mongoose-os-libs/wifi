@@ -319,6 +319,7 @@ void mgos_wifi_sta_scan_cb(int num_res, struct mgos_wifi_scan_result *res,
       LOG(LL_DEBUG, ("  %d: %02x:%02x:%02x:%02x:%02x:%02x %d %d", i, bssid[0],
                      bssid[1], bssid[2], bssid[3], bssid[4], bssid[5],
                      ape->rssi, ape->num_attempts));
+      (void) bssid;
       i++;
     }
   }
@@ -405,6 +406,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         s_cur_entry = NULL;
         s_state = WIFI_STA_WAIT_CONNECT;
         set_timeout_n(1000, false /* run_now */);
+        (void) bssid_s;
         break;
       }
       if (ape == NULL) {
@@ -513,6 +515,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
     case WIFI_STA_SHUTDOWN:
       break;
   }
+  (void) ev_data;
 }
 
 static void mgos_wifi_ev_handler(int ev, void *evd, void *cb_arg) {
