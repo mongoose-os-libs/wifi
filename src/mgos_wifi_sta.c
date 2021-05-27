@@ -17,6 +17,8 @@
 
 #include "mgos_wifi_sta.h"
 
+#include <strings.h>
+
 #include "mgos.h"
 #include "mgos_wifi.h"
 #include "mgos_wifi_hal.h"
