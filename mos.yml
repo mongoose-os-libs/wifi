@@ -80,7 +80,7 @@ conds:
   - when: mos.platform == "esp8266"
     apply:
       libs:
-        - origin: https://github.com/mongoose-os-libs/lwip
+        - location: https://github.com/mongoose-os-libs/lwip
       config_schema:
         - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
         # min/max values are from enum RATE_11{B,G,N}_ID in the SDK, see user_interface.h for declarations.
@@ -123,7 +123,7 @@ conds:
   - when: mos.platform == "rs14100"
     apply:
       libs:
-        - origin: https://github.com/mongoose-os-libs/lwip
+        - location: https://github.com/mongoose-os-libs/lwip
       config_schema:
         - ["wifi.sta.band", "i", 2, {title: "Frequency band for station: 0 - 2.4 GHz, 1 - 5 GHz, 2 - both"}]
         - ["wifi.sta_params", "o", {title: "Common station params"}]
