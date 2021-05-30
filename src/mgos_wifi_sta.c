@@ -40,7 +40,7 @@
 #endif
 
 #ifndef MGOS_WIFI_STA_MAX_AP_QUEUE_LEN
-#define MGOS_WIFI_STA_MAX_AP_QUEUE_LEN 2
+#define MGOS_WIFI_STA_MAX_AP_QUEUE_LEN 5
 #endif
 
 void wifi_lock(void);
@@ -99,10 +99,12 @@ static void mgos_wifi_sta_free_cfg(struct mgos_config_wifi_sta *cfg) {
 }
 
 static struct wifi_ap_entry *mgos_wifi_sta_find_history_entry(
-    const uint8_t *bssid) {
+    const uint8_t *bssid, const struct mgos_config_wifi_sta *cfg) {
   struct wifi_ap_entry *ape = NULL;
   SLIST_FOREACH(ape, &s_ap_history, next) {
-    if (memcmp(ape->bssid, bssid, sizeof(ape->bssid)) == 0) return ape;
+    if (ape->cfg == cfg && memcmp(ape->bssid, bssid, sizeof(ape->bssid)) == 0) {
+      return ape;
+    }
   }
   return NULL;
 }
@@ -132,12 +134,40 @@ static const char *mgos_wifi_sta_bssid_to_str(const uint8_t *bssid,
   return bssid_s;
 }
 
+static void mgos_wifi_sta_run_cb(void *arg) {
+  wifi_lock();
+  bool is_timeout = (arg != NULL);
+  mgos_wifi_sta_run(-1 /* wifi_ev */, NULL /* evd */, is_timeout);
+  wifi_unlock();
+}
+
+static void mgos_wifi_sta_set_timeout_n(int timeout, bool run_now) {
+  mgos_clear_timer(s_connect_timer_id);
+  s_connect_timer_id = mgos_set_timer(timeout, MGOS_TIMER_REPEAT,
+                                      mgos_wifi_sta_run_cb, (void *) 1);
+  if (run_now) {
+    mgos_invoke_cb(mgos_wifi_sta_run_cb, NULL, false /* from_isr */);
+  }
+}
+
+static void mgos_wifi_sta_set_timeout(bool run_now) {
+  mgos_wifi_sta_set_timeout_n(
+      mgos_sys_config_get_wifi_sta_connect_timeout() * 1000, run_now);
+}
+
 static bool check_ap(const struct mgos_wifi_scan_result *e,
                      const struct mgos_config_wifi_sta **sta_cfg,
-                     const struct wifi_ap_entry *hape, const char **reason) {
-  *sta_cfg = NULL;
+                     bool check_history, struct wifi_ap_entry **hape,
+                     const char **reason) {
   for (int i = 0; i < s_num_cfgs; i++) {
     const struct mgos_config_wifi_sta *cfg = s_cfgs[i];
+    if (*sta_cfg != NULL) {  // Continue iterating from last config.
+      if (cfg == *sta_cfg) {
+        // Start checking for real from the next entry.
+        *sta_cfg = NULL;
+      }
+      continue;
+    }
     if (!cfg->enable) continue;
     if (strcmp(cfg->ssid, e->ssid) != 0) continue;
     // Check if auth mode matches.
@@ -167,6 +197,7 @@ static bool check_ap(const struct mgos_wifi_scan_result *e,
       }
     }
     *sta_cfg = cfg;
+    *hape = mgos_wifi_sta_find_history_entry(e->bssid, cfg);
     break;
   }
   if (*sta_cfg == NULL) {
@@ -177,52 +208,37 @@ static bool check_ap(const struct mgos_wifi_scan_result *e,
     *reason = "too weak";
     return false;
   }
-  if (hape != NULL && hape->num_attempts >= MGOS_WIFI_STA_AP_ATTEMPTS &&
-      (mgos_uptime_micros() - hape->last_attempt <
-       (MGOS_WIFI_STA_FAILING_AP_RETRY_SECONDS * 1000000LL))) {
-    *reason = "bad history";
-    return false;
+  if (check_history && *hape != NULL) {
+    if ((*hape)->num_attempts >= MGOS_WIFI_STA_AP_ATTEMPTS &&
+        (mgos_uptime_micros() - (*hape)->last_attempt <
+         (MGOS_WIFI_STA_FAILING_AP_RETRY_SECONDS * 1000000LL))) {
+      *reason = "bad history";
+      return false;
+    }
   }
   *reason = "ok";
   return true;
 }
 
-static void mgos_wifi_sta_connect_timeout_timer_cb(void *arg) {
-  wifi_lock();
-  mgos_wifi_sta_run(-1 /* wifi_ev */, NULL /* evd */, true /* timeout */);
-  wifi_unlock();
-  (void) arg;
-}
-
-static void set_timeout_n(int timeout, bool run_now) {
-  mgos_clear_timer(s_connect_timer_id);
-  s_connect_timer_id = mgos_set_timer(
-      timeout, MGOS_TIMER_REPEAT, mgos_wifi_sta_connect_timeout_timer_cb, NULL);
-  if (run_now) {
-    mgos_wifi_sta_run(-1 /* wifi_ev */, NULL /* evd */, false /* timeout */);
-  }
-}
-
-static void set_timeout(bool run_now) {
-  set_timeout_n(mgos_sys_config_get_wifi_sta_connect_timeout() * 1000, run_now);
-}
-
 static void mgos_wifi_sta_build_queue(int num_res,
                                       struct mgos_wifi_scan_result *res,
                                       bool check_history) {
-  for (int i = 0; i < num_res; i++) {
+  int i;
+  struct wifi_ap_entry *ape = NULL;
+  for (i = 0; i < num_res; i++) {
     const struct mgos_wifi_scan_result *e = &res[i];
     const struct mgos_config_wifi_sta *cfg = NULL;
     const char *reason = NULL;
-    struct wifi_ap_entry *eape = mgos_wifi_sta_find_history_entry(e->bssid);
-    bool ok = check_ap(e, &cfg, (check_history ? eape : NULL), &reason);
-    /* Check if we already have this queued. */
-    int len = 0;
-    struct wifi_ap_entry *pape = NULL;
-    if (ok) {
+    struct wifi_ap_entry *eape = NULL;
+    bool ok;
+    while ((ok = check_ap(e, &cfg, check_history, &eape, &reason))) {
+      int len = 0;
+      struct wifi_ap_entry *pape = NULL;
+      /* Check if we already have this queued. */
       struct wifi_ap_entry *ape = NULL;
       SLIST_FOREACH(ape, &s_ap_queue, next) {
-        if (memcmp(ape->bssid, e->bssid, sizeof(e->bssid)) == 0) {
+        if (memcmp(ape->bssid, e->bssid, sizeof(e->bssid)) == 0 &&
+            ape->cfg == cfg) {
           ok = false;
           reason = "dup";
           break;
@@ -244,58 +260,67 @@ static void mgos_wifi_sta_build_queue(int num_res,
           pape = ape;
         }
       }
-    }
-    if (ok) {
-      if (eape == NULL) {
-        eape = calloc(1, sizeof(*eape));
-        memcpy(eape->bssid, e->bssid, sizeof(eape->bssid));
-      } else {
-        mgos_wifi_sta_remove_history_entry(eape);
-      }
-      if (eape == NULL) return;
-      eape->cfg = cfg;
-      eape->rssi = e->rssi;
-      if (pape != NULL) {
-        SLIST_INSERT_AFTER(pape, eape, next);
-      } else {
-        SLIST_INSERT_HEAD(&s_ap_queue, eape, next);
-      }
-      len++;
-      while (len > MGOS_WIFI_STA_MAX_AP_QUEUE_LEN) {
-        len = 0;
-        pape = NULL;
-        struct wifi_ap_entry *ape = NULL;
-        SLIST_FOREACH(ape, &s_ap_queue, next) {
-          if (SLIST_NEXT(ape, next) == NULL) {
-            if (pape != NULL) {
-              SLIST_REMOVE_AFTER(pape, next);
-            } else {
-              SLIST_REMOVE_HEAD(&s_ap_queue, next);
+      if (ok) {
+        if (eape == NULL) {
+          eape = calloc(1, sizeof(*eape));
+          memcpy(eape->bssid, e->bssid, sizeof(eape->bssid));
+        } else {
+          mgos_wifi_sta_remove_history_entry(eape);
+        }
+        if (eape == NULL) return;
+        eape->cfg = cfg;
+        eape->rssi = e->rssi;
+        if (pape != NULL) {
+          SLIST_INSERT_AFTER(pape, eape, next);
+        } else {
+          SLIST_INSERT_HEAD(&s_ap_queue, eape, next);
+        }
+        len++;
+        while (len > MGOS_WIFI_STA_MAX_AP_QUEUE_LEN) {
+          len = 0;
+          pape = NULL;
+          SLIST_FOREACH(ape, &s_ap_queue, next) {
+            if (SLIST_NEXT(ape, next) == NULL) {
+              if (pape != NULL) {
+                SLIST_REMOVE_AFTER(pape, next);
+              } else {
+                SLIST_REMOVE_HEAD(&s_ap_queue, next);
+              }
+              // If evicted entry has been tried before, put it back on the
+              // history list. If it's a completely new AP that didn't make it,
+              // just drop it on the floor, we'll find it again next time.
+              if (ape->num_attempts > 0) {
+                mgos_wifi_sta_add_history_entry(ape);
+              } else {
+                free(ape);
+                if (eape == ape) eape = NULL;
+              }
+              break;
             }
-            // If evicted entry has been tried before, put it back on the
-            // history list. If it's a completely new AP that didn't make it,
-            // just drop it on the floor, we'll find it again next time.
-            if (ape->num_attempts > 0) {
-              mgos_wifi_sta_add_history_entry(ape);
-            } else {
-              free(ape);
-              if (eape == ape) eape = NULL;
-            }
-            break;
+            pape = ape;
+            len++;
           }
-          pape = ape;
-          len++;
         }
       }
+      LOG(LL_DEBUG,
+          ("  %d: SSID: %-32s, BSSID: %02x:%02x:%02x:%02x:%02x:%02x "
+           "auth: %d, ch: %3d, RSSI: %2d att %d - %d %s cfg %p",
+           i, e->ssid, e->bssid[0], e->bssid[1], e->bssid[2], e->bssid[3],
+           e->bssid[4], e->bssid[5], e->auth_mode, e->channel, e->rssi,
+           (eape ? eape->num_attempts : -1), ok, reason, cfg));
+      (void) reason;
     }
-    LOG(LL_DEBUG,
-        ("  %d: SSID: %-32s, BSSID: %02x:%02x:%02x:%02x:%02x:%02x "
-         "auth: %d, ch: %3d, RSSI: %2d att %d - %d %s",
-         i, e->ssid, e->bssid[0], e->bssid[1], e->bssid[2], e->bssid[3],
-         e->bssid[4], e->bssid[5], e->auth_mode, e->channel, e->rssi,
-         (eape ? eape->num_attempts : -1), ok, reason));
-    (void) reason;
   }
+  i = 0;
+  SLIST_FOREACH(ape, &s_ap_queue, next) {
+    LOG(LL_DEBUG, ("  %d: SSID: %-32s, BSSID: %02x:%02x:%02x:%02x:%02x:%02x "
+                   "RSSI %d cfg %p att %u",
+                   i, ape->cfg->ssid, ape->bssid[0], ape->bssid[1],
+                   ape->bssid[2], ape->bssid[3], ape->bssid[4], ape->bssid[5],
+                   ape->rssi, ape->cfg, ape->num_attempts));
+    i++;
+  }
+  LOG(LL_INFO, ("Found %d canddiate APs", i));
 }
 
 void mgos_wifi_sta_scan_cb(int num_res, struct mgos_wifi_scan_result *res,
@@ -326,7 +351,7 @@ void mgos_wifi_sta_scan_cb(int num_res, struct mgos_wifi_scan_result *res,
     }
   }
   s_state = WIFI_STA_CONNECT;
-  set_timeout(true /* run_now */);
+  mgos_wifi_sta_set_timeout(true /* run_now */);
   (void) arg;
 }
 
@@ -350,12 +375,12 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
     case WIFI_STA_INIT:
       mgos_wifi_dev_sta_disconnect();
       s_state = WIFI_STA_SCAN;
-      set_timeout(true /* run_now */);
+      mgos_wifi_sta_set_timeout(true /* run_now */);
       s_roaming = false;
       s_cur_entry = NULL;
       break;
     case WIFI_STA_SCAN:
-      LOG(LL_DEBUG, ("Starting scan"));
+      LOG(LL_INFO, ("Starting scan"));
       mgos_wifi_sta_empty_queue();
       s_state = WIFI_STA_SCANNING;
       mgos_wifi_scan(mgos_wifi_sta_scan_cb, NULL);
@@ -363,16 +388,16 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
     case WIFI_STA_SCANNING:
       if (timeout) {
         s_state = WIFI_STA_SCAN;
-        set_timeout(true /* run_now */);
+        mgos_wifi_sta_set_timeout(true /* run_now */);
       }
       break;
     case WIFI_STA_WAIT_CONNECT:
       if (!timeout) {
-        set_timeout_n(1000, false /* run_now */);
+        mgos_wifi_sta_set_timeout_n(2000, false /* run_now */);
         break;
       }
       s_state = WIFI_STA_CONNECT;
-      set_timeout_n(1000, true /* run_now */);
+      mgos_wifi_sta_set_timeout_n(1000, false /* run_now */);
       break;
     case WIFI_STA_CONNECT: {
       struct wifi_ap_entry *ape = SLIST_FIRST(&s_ap_queue);
@@ -395,7 +420,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         }
         if (!ok) {
           s_state = WIFI_STA_IP_ACQUIRED;
-          set_timeout(true /* run_now */);
+          mgos_wifi_sta_set_timeout(true /* run_now */);
           break;
         }
         /* We have a better AP candidate, disconnect and try to roam. */
@@ -407,14 +432,14 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         /* We need to allow some time for connection to terminate. */
         s_cur_entry = NULL;
         s_state = WIFI_STA_WAIT_CONNECT;
-        set_timeout_n(1000, false /* run_now */);
+        mgos_wifi_sta_set_timeout_n(1000, false /* run_now */);
         (void) bssid_s;
         break;
       }
       if (ape == NULL) {
-        LOG(LL_DEBUG, ("No more candidate APs"));
+        LOG(LL_INFO, ("No candidate APs"));
         s_state = WIFI_STA_SCAN;
-        set_timeout(true /* run_now */);
+        mgos_wifi_sta_set_timeout(false /* run_now */);
         break;
       }
       ape->num_attempts++;
@@ -430,9 +455,9 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
       }
       uint8_t *bssid = &ape->bssid[0];
       LOG(LL_INFO,
-          ("Trying %s AP %02x:%02x:%02x:%02x:%02x:%02x RSSI %d attempt %d",
+          ("Trying %s AP %02x:%02x:%02x:%02x:%02x:%02x RSSI %d cfg %p att %d",
            ape->cfg->ssid, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4],
-           bssid[5], ape->rssi, ape->num_attempts));
+           bssid[5], ape->rssi, ape->cfg, ape->num_attempts));
       ape->last_attempt = mgos_uptime_micros();
       char bssid_s[20];
       mgos_wifi_sta_bssid_to_str(bssid, bssid_s);
@@ -441,7 +466,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
       mgos_wifi_dev_sta_setup(&sta_cfg);
       mgos_wifi_dev_sta_connect();
       s_state = WIFI_STA_CONNECTING;
-      set_timeout(true /* run_now */);
+      mgos_wifi_sta_set_timeout(true /* run_now */);
       break;
     }
     case WIFI_STA_CONNECTING: {
@@ -455,7 +480,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         mgos_wifi_dev_sta_disconnect();
         s_cur_entry = NULL;
         s_state = WIFI_STA_WAIT_CONNECT;
-        set_timeout_n(1000, false /* run_now */);
+        mgos_wifi_sta_set_timeout_n(1000, false /* run_now */);
         break;
       }
       if (wifi_ev == MGOS_WIFI_EV_STA_CONNECTED) {
@@ -480,7 +505,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
       if (timeout || wifi_ev == MGOS_WIFI_EV_STA_DISCONNECTED ||
           cur_rssi == 0) {
         s_state = WIFI_STA_INIT;
-        set_timeout_n(1000, false /* run_now */);
+        mgos_wifi_sta_set_timeout_n(1000, false /* run_now */);
         break;
       }
       break;
@@ -489,7 +514,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
       int cur_rssi = mgos_wifi_sta_get_rssi();
       if (wifi_ev == MGOS_WIFI_EV_STA_DISCONNECTED || cur_rssi == 0) {
         s_state = WIFI_STA_INIT;
-        set_timeout_n(1000, false /* run_now */);
+        mgos_wifi_sta_set_timeout_n(1000, false /* run_now */);
         break;
       }
       int roam_rssi_thr = mgos_sys_config_get_wifi_sta_roam_rssi_thr();
@@ -509,7 +534,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
               ("Current RSSI %d, will scan for a better AP", cur_rssi));
           s_roaming = true;
           s_state = WIFI_STA_SCAN;
-          set_timeout(true /* run_now */);
+          mgos_wifi_sta_set_timeout(true /* run_now */);
           s_last_roam_attempt = mgos_uptime_micros();
         }
       }
@@ -536,7 +561,7 @@ bool mgos_wifi_connect(void) {
       break;
     case WIFI_STA_IDLE:
       s_state = WIFI_STA_INIT;
-      set_timeout(true /* run_now */);
+      mgos_wifi_sta_set_timeout(true /* run_now */);
       break;
     case WIFI_STA_INIT:
     case WIFI_STA_SCAN:
@@ -687,7 +712,6 @@ const struct mgos_config_wifi_sta *mgos_wifi_get_connected_sta_cfg(void) {
   if (s_cur_entry == NULL) return NULL;
   return s_cur_entry->cfg;
 }
-
 
 void mgos_wifi_sta_init(void) {
   mgos_event_add_group_handler(MGOS_WIFI_EV_BASE, mgos_wifi_ev_handler, NULL);
