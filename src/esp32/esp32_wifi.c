@@ -40,7 +40,6 @@
 static bool s_inited = false;
 static bool s_started = false;
 static bool s_connecting = false;
-static bool s_user_sta_enabled = false;
 
 static esp_err_t esp32_wifi_add_mode(wifi_mode_t mode);
 static esp_err_t esp32_wifi_remove_mode(wifi_mode_t mode);
@@ -116,7 +115,6 @@ static void esp32_wifi_event_handler(void *ctx, esp_event_base_t ev_base,
         free(aps);
       }
       mgos_wifi_dev_scan_cb(num_res, res);
-      if (!s_user_sta_enabled) esp32_wifi_remove_mode(WIFI_MODE_STA);
       break;
     }
     default:
@@ -220,6 +218,7 @@ static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
   }
 
   if (mode == WIFI_MODE_NULL) {
+    *((int *) 123) = 456;
     if (s_started) {
       esp_wifi_set_mode(WIFI_MODE_NULL);
     }
@@ -306,8 +305,6 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   esp_err_t r;
   wifi_config_t wcfg = {0};
   wifi_sta_config_t *stacfg = &wcfg.sta;
-
-  s_user_sta_enabled = cfg->enable;
 
   if (!cfg->enable) {
     result = (esp32_wifi_remove_mode(WIFI_MODE_STA) == ESP_OK);
