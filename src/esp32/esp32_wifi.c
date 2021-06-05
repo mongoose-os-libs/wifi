@@ -218,7 +218,6 @@ static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
   }
 
   if (mode == WIFI_MODE_NULL) {
-    *((int *) 123) = 456;
     if (s_started) {
       esp_wifi_set_mode(WIFI_MODE_NULL);
     }
