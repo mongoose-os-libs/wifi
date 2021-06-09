@@ -187,7 +187,6 @@ bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
     free(err_msg);
     return false;
   }
-  mgos_wifi_disconnect();
   mgos_wifi_sta_clear_cfgs();
   if (cfg->enable) {
     ret = mgos_wifi_sta_add_cfg(cfg);

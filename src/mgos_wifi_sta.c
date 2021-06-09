@@ -684,6 +684,7 @@ bool mgos_wifi_sta_add_cfg(const struct mgos_config_wifi_sta *cfg) {
 }
 
 void mgos_wifi_sta_clear_cfgs(void) {
+  mgos_wifi_disconnect();
   s_cur_entry = NULL;
   while (!SLIST_EMPTY(&s_ap_queue)) {
     struct wifi_ap_entry *ape = SLIST_FIRST(&s_ap_queue);
