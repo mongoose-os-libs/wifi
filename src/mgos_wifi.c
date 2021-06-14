@@ -54,6 +54,8 @@ void wifi_unlock(void) {
   mgos_runlock(s_wifi_lock);
 }
 
+extern void mgos_wifi_sta_ev_handler(int ev, void *evd, void *cb_arg);
+
 static void mgos_wifi_event_cb(void *arg) {
   bool net_event = true;
   struct mgos_wifi_dev_event_info *dei =
@@ -101,6 +103,9 @@ static void mgos_wifi_event_cb(void *arg) {
       break;
     }
   }
+
+  /* Deliver to STA code to ensure it is the first handler. */
+  mgos_wifi_sta_ev_handler(dei->ev, ev_arg, NULL);
 
   mgos_event_trigger(dei->ev, ev_arg);
 

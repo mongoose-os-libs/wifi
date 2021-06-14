@@ -549,7 +549,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
   (void) ev_data;
 }
 
-static void mgos_wifi_ev_handler(int ev, void *evd, void *cb_arg) {
+void mgos_wifi_sta_ev_handler(int ev, void *evd, void *cb_arg) {
   wifi_lock();
   mgos_wifi_sta_run(ev, evd, false /* timeout */);
   wifi_unlock();
@@ -719,7 +719,6 @@ const struct mgos_config_wifi_sta *mgos_wifi_get_connected_sta_cfg(void) {
 }
 
 void mgos_wifi_sta_init(void) {
-  mgos_event_add_group_handler(MGOS_WIFI_EV_BASE, mgos_wifi_ev_handler, NULL);
   mgos_event_add_handler(MGOS_EVENT_REBOOT_AFTER,
                          mgos_wifi_reboot_after_ev_handler, NULL);
 }
