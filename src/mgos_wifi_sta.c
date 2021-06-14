@@ -466,6 +466,10 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
       mgos_wifi_dev_sta_setup(&sta_cfg);
       mgos_wifi_dev_sta_connect();
       s_state = WIFI_STA_CONNECTING;
+      struct mgos_wifi_dev_event_info dei = {
+          .ev = MGOS_WIFI_EV_STA_CONNECTING,
+      };
+      mgos_wifi_dev_event_cb(&dei);
       mgos_wifi_sta_set_timeout(true /* run_now */);
       break;
     }
