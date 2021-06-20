@@ -350,7 +350,7 @@ void mgos_wifi_sta_scan_cb(int num_res, struct mgos_wifi_scan_result *res,
   mgos_wifi_sta_build_queue(num_res, res, true /* check_history */, &seen_cfg);
   if (SLIST_EMPTY(&s_ap_queue)) {
     // No good quality APs left to try, keep trying bad ones.
-    LOG(LL_INFO, ("Second pass"));
+    LOG(LL_DEBUG, ("Second pass"));
     mgos_wifi_sta_build_queue(num_res, res, false /* check_history */,
                               &seen_cfg);
   }
@@ -461,7 +461,6 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         /* If we are roaming and have no good candidate, go back. */
         int cur_rssi = mgos_wifi_sta_get_rssi();
         bool ok = false;
-        s_rssi_info.val <<= 8;
         if (ape == NULL || ape->rssi == 0) {
           LOG(LL_INFO, ("No candidate APs"));
         } else if (s_cur_entry != NULL && memcmp(s_cur_entry->bssid, ape->bssid,
@@ -590,15 +589,13 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
           sum += s_rssi_info.samples[i];
         }
         int avg_rssi = sum / (int) ARRAY_SIZE(s_rssi_info.samples);
-        int64_t now = mgos_uptime_micros();
         if (avg_rssi < roam_rssi_thr &&
-            (now - s_last_roam_attempt > roam_intvl * 1000000)) {
-          LOG(LL_INFO,
-              ("Current RSSI %d, will scan for a better AP", cur_rssi));
+            mgos_uptime_micros() - s_last_roam_attempt > roam_intvl * 1000000) {
+          LOG(LL_INFO, ("Avg RSSI %d, will scan for a better AP", avg_rssi));
           s_roaming = true;
           s_state = WIFI_STA_SCAN;
-          mgos_wifi_sta_set_timeout(true /* run_now */);
           s_last_roam_attempt = mgos_uptime_micros();
+          mgos_wifi_sta_set_timeout(true /* run_now */);
         }
       }
     }
