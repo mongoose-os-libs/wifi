@@ -32,7 +32,7 @@
 #endif
 
 #ifndef MGOS_WIFI_STA_AP_HISTORY_SIZE
-#define MGOS_WIFI_STA_AP_HISTORY_SIZE 20
+#define MGOS_WIFI_STA_AP_HISTORY_SIZE 25
 #endif
 
 #ifndef MGOS_WIFI_STA_ROAM_RSSI_HYST
@@ -40,7 +40,7 @@
 #endif
 
 #ifndef MGOS_WIFI_STA_MAX_AP_QUEUE_LEN
-#define MGOS_WIFI_STA_MAX_AP_QUEUE_LEN 5
+#define MGOS_WIFI_STA_MAX_AP_QUEUE_LEN 10
 #endif
 
 void wifi_lock(void);
@@ -205,7 +205,7 @@ static bool check_ap(const struct mgos_wifi_scan_result *e,
     break;
   }
   if (*sta_cfg == NULL) {
-    *reason = "no matching config";
+    *reason = "no cfg";
     return false;
   }
   if (e->rssi < mgos_sys_config_get_wifi_sta_rssi_thr()) {
@@ -216,7 +216,7 @@ static bool check_ap(const struct mgos_wifi_scan_result *e,
     if ((*hape)->num_attempts >= MGOS_WIFI_STA_AP_ATTEMPTS &&
         (mgos_uptime_micros() - (*hape)->last_attempt <
          (MGOS_WIFI_STA_FAILING_AP_RETRY_SECONDS * 1000000LL))) {
-      *reason = "bad history";
+      *reason = "bad";
       return false;
     }
   }
@@ -233,20 +233,32 @@ static int get_cfg_index(const struct mgos_config_wifi_sta *cfg) {
 
 static void mgos_wifi_sta_build_queue(int num_res,
                                       struct mgos_wifi_scan_result *res,
-                                      bool check_history) {
-  int i;
-  for (i = 0; i < num_res; i++) {
+                                      bool check_history, uint32_t *seen_cfg) {
+  for (int i = 0; i < num_res; i++) {
     const struct mgos_wifi_scan_result *e = &res[i];
     const struct mgos_config_wifi_sta *cfg = NULL;
-    int cfg_index = 0;
-    const char *reason = NULL;
-    struct wifi_ap_entry *eape = NULL;
-    bool ok;
-    while (
-        (ok = check_ap(e, &cfg, &cfg_index, check_history, &eape, &reason))) {
+    int cfg_index = -1;
+    bool first = true;
+    while (true) {
+      const char *reason = NULL;
+      struct wifi_ap_entry *eape = NULL;
+      bool ok = check_ap(e, &cfg, &cfg_index, check_history, &eape, &reason);
+      if (ok || first) {
+        LOG(LL_DEBUG,
+            ("  %d: SSID: %-32s, BSSID: %02x:%02x:%02x:%02x:%02x:%02x "
+             "auth: %d, ch: %3d, RSSI: %2d - %s cfg %d att %d",
+             i, e->ssid, e->bssid[0], e->bssid[1], e->bssid[2], e->bssid[3],
+             e->bssid[4], e->bssid[5], e->auth_mode, e->channel, e->rssi,
+             reason, cfg_index, (eape ? eape->num_attempts : -1)));
+      }
+      if (cfg_index != -1) {
+        *seen_cfg |= (1 << cfg_index);
+      }
+      if (!ok) break;
+      first = false;
       int len = 0;
       struct wifi_ap_entry *pape = NULL;
-      /* Find a position in the queue for this AP. */
+      // Find a position in the queue for this AP.
       struct wifi_ap_entry *ape = NULL;
       SLIST_FOREACH(ape, &s_ap_queue, next) {
         if (memcmp(ape->bssid, e->bssid, sizeof(e->bssid)) == 0 &&
@@ -255,8 +267,7 @@ static void mgos_wifi_sta_build_queue(int num_res,
           reason = "dup";
           break;
         }
-        /* Config index indicates preference: lower index = higher preference.
-         */
+        // Config index indicates preference: lower index = higher preference.
         int ape_cfg_index = get_cfg_index(ape->cfg);
         if (cfg_index != ape_cfg_index) {
           if (cfg_index > ape_cfg_index) {
@@ -264,9 +275,9 @@ static void mgos_wifi_sta_build_queue(int num_res,
           }
           continue;
         }
-        /* Among bad ones, prefer those with fewer attempts.
-         * This will have the effect of cycling through all available ones
-         * even when there are more than the queue can hold. */
+        // Among bad ones, prefer those with fewer attempts.
+        // This will have the effect of cycling through all available ones
+        // even when there are more than the queue can hold.
         if (ape->num_attempts >= MGOS_WIFI_STA_AP_ATTEMPTS && eape != NULL &&
             eape->num_attempts >= MGOS_WIFI_STA_AP_ATTEMPTS &&
             eape->num_attempts != ape->num_attempts) {
@@ -322,12 +333,6 @@ static void mgos_wifi_sta_build_queue(int num_res,
           }
         }
       }
-      LOG(LL_DEBUG,
-          ("  %d: SSID: %-32s, BSSID: %02x:%02x:%02x:%02x:%02x:%02x "
-           "auth: %d, ch: %3d, RSSI: %2d att %d - %d %s cfg %d",
-           i, e->ssid, e->bssid[0], e->bssid[1], e->bssid[2], e->bssid[3],
-           e->bssid[4], e->bssid[5], e->auth_mode, e->channel, e->rssi,
-           (eape ? eape->num_attempts : -1), ok, reason, cfg_index));
       (void) reason;
     }
   }
@@ -341,11 +346,49 @@ void mgos_wifi_sta_scan_cb(int num_res, struct mgos_wifi_scan_result *res,
     s_state = WIFI_STA_SCAN;
     return;
   }
-  mgos_wifi_sta_build_queue(num_res, res, true /* check_history */);
+  uint32_t seen_cfg = 0;
+  mgos_wifi_sta_build_queue(num_res, res, true /* check_history */, &seen_cfg);
   if (SLIST_EMPTY(&s_ap_queue)) {
-    /* No good quality APs left to try, keep trying bad ones. */
-    LOG(LL_DEBUG, ("Second pass"));
-    mgos_wifi_sta_build_queue(num_res, res, false /* check_history */);
+    // No good quality APs left to try, keep trying bad ones.
+    LOG(LL_INFO, ("Second pass"));
+    mgos_wifi_sta_build_queue(num_res, res, false /* check_history */,
+                              &seen_cfg);
+  }
+  // If we found absolutely no APs for a config that is enabled,
+  // insert a non-specific entry in case it's a hidden SSID.
+  for (int cfg_index = 0; cfg_index < s_num_cfgs; cfg_index++) {
+    const struct mgos_config_wifi_sta *cfg = s_cfgs[cfg_index];
+    if (!cfg->enable) continue;
+    if (seen_cfg & (1 << cfg_index)) continue;
+    bool found = false;
+    struct wifi_ap_entry *ape = NULL, *pape = NULL;
+    SLIST_FOREACH(ape, &s_ap_queue, next) {
+      if (ape->cfg == cfg) {
+        found = true;
+        break;
+      }
+      int ape_cfg_index = get_cfg_index(ape->cfg);
+      if (ape_cfg_index < cfg_index) {
+        pape = ape;
+      } else {
+        break;
+      }
+    }
+    if (found) continue;
+    uint8_t bssid[6] = {0};
+    struct wifi_ap_entry *eape = mgos_wifi_sta_find_history_entry(bssid, cfg);
+    if (eape == NULL) {
+      eape = calloc(1, sizeof(*eape));
+      eape->cfg = cfg;
+    } else {
+      mgos_wifi_sta_remove_history_entry(eape);
+    }
+    if (eape == NULL) return;
+    if (pape != NULL) {
+      SLIST_INSERT_AFTER(pape, eape, next);
+    } else {
+      SLIST_INSERT_HEAD(&s_ap_queue, eape, next);
+    }
   }
   if (!SLIST_EMPTY(&s_ap_queue)) {
     int i = 0;
@@ -418,7 +461,8 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         /* If we are roaming and have no good candidate, go back. */
         int cur_rssi = mgos_wifi_sta_get_rssi();
         bool ok = false;
-        if (ape == NULL) {
+        s_rssi_info.val <<= 8;
+        if (ape == NULL || ape->rssi == 0) {
           LOG(LL_INFO, ("No candidate APs"));
         } else if (s_cur_entry != NULL && memcmp(s_cur_entry->bssid, ape->bssid,
                                                  sizeof(ape->bssid)) == 0) {
@@ -472,10 +516,12 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
            ape->cfg->ssid, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4],
            bssid[5], ape->rssi, get_cfg_index(ape->cfg), ape->num_attempts));
       ape->last_attempt = mgos_uptime_micros();
-      char bssid_s[20];
-      mgos_wifi_sta_bssid_to_str(bssid, bssid_s);
       struct mgos_config_wifi_sta sta_cfg = *ape->cfg;
-      sta_cfg.bssid = bssid_s;
+      char bssid_s[20];
+      if (ape->rssi != 0) {
+        sta_cfg.bssid = bssid_s;
+        mgos_wifi_sta_bssid_to_str(bssid, bssid_s);
+      }
       mgos_wifi_dev_sta_setup(&sta_cfg);
       mgos_wifi_dev_sta_connect();
       s_state = WIFI_STA_CONNECTING;
