@@ -275,6 +275,8 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     }
     LOG(LL_INFO, ("WiFi STA IP: %s/%s gw %s", cfg->ip, cfg->netmask,
                   (cfg->gw ? cfg->gw : "")));
+  } else {
+    wifi_station_dhcpc_start();
   }
 
   if (mgos_conf_str_empty(cfg->user) /* Not using EAP */ &&
