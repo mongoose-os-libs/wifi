@@ -724,8 +724,13 @@ static void mgos_wifi_reboot_after_ev_handler(int ev, void *evd, void *cb_arg) {
 }
 
 bool mgos_wifi_sta_add_cfg(const struct mgos_config_wifi_sta *cfg) {
+  char *err_msg = NULL;
   if (!cfg->enable) return false;
-  if (!mgos_wifi_validate_sta_cfg(cfg, NULL)) return false;
+  if (!mgos_wifi_validate_sta_cfg(cfg, &err_msg)) {
+    LOG(LL_ERROR, ("WiFi STA: %s", err_msg));
+    free(err_msg);
+    return false;
+  }
   struct mgos_config_wifi_sta *cfg2;
   if (is_sys_cfg(cfg)) {
     cfg2 = (struct mgos_config_wifi_sta *) cfg;
