@@ -39,8 +39,12 @@
 #include "mgos_wifi.h"
 #include "mgos_wifi_hal.h"
 
-#include "lwip/dns.h"
+#include "lwip/dhcp.h"
 #include "lwip/init.h"
+#include "lwip/netif.h"
+
+struct ieee80211_conn;
+#include "netif/wlan_lwip_if.h"
 
 static uint8_t s_cur_mode = NULL_MODE;
 
@@ -461,9 +465,20 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
       info.ip.addr == 0) {
     return false;
   }
+  memset(ip_info, 0, sizeof(*ip_info));
   ip_info->ip.sin_addr.s_addr = info.ip.addr;
   ip_info->netmask.sin_addr.s_addr = info.netmask.addr;
   ip_info->gw.sin_addr.s_addr = info.gw.addr;
+  if (if_instance == 0) {
+    struct netif *sta_if = eagle_lwip_getif(STATION_IF);
+    if (sta_if != NULL) {
+      struct dhcp *dhcp = sta_if->dhcp;
+      if (dhcp != NULL) {
+        ip_info->dns.sin_addr.s_addr =
+            ip4_addr_get_u32(&dhcp->offered_dns_addr);
+      }
+    }
+  }
   return true;
 }
 

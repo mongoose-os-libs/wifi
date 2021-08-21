@@ -382,7 +382,9 @@ bool mgos_wifi_dev_sta_disconnect(void) {
 }
 
 bool rs14100_wifi_sta_get_ip_info(struct mgos_net_ip_info *ip_info) {
-  return mgos_lwip_if_get_ip_info(s_sta_ctx.netif, ip_info);
+  const struct mgos_config_wifi_sta *cfg = mgos_wifi_get_connected_sta_cfg();
+  return mgos_lwip_if_get_ip_info(s_sta_ctx.netif,
+                                  (cfg ? cfg->nameserver : NULL), ip_info);
 }
 
 int mgos_wifi_sta_get_rssi(void) {

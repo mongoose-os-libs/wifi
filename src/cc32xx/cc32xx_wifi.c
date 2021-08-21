@@ -582,10 +582,12 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
   ip_info->ip.sin_addr.s_addr = ntohl(info.Ip);
   ip_info->netmask.sin_addr.s_addr = ntohl(info.IpMask);
   ip_info->gw.sin_addr.s_addr = ntohl(info.IpGateway);
+  ip_info->dns.sin_addr.s_addr = ntohl(info.IpDnsServer);
 #else
   ip_info->ip.sin_addr.s_addr = ntohl(info.ipV4);
   ip_info->netmask.sin_addr.s_addr = ntohl(info.ipV4Mask);
   ip_info->gw.sin_addr.s_addr = ntohl(info.ipV4Gateway);
+  ip_info->dns.sin_addr.s_addr = ntohl(info.ipV4DnsServer);
 #endif
   return true;
 }

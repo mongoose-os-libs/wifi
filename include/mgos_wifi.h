@@ -183,11 +183,6 @@ char *mgos_wifi_get_connected_ssid(void);
 const struct mgos_config_wifi_sta *mgos_wifi_get_connected_sta_cfg(void);
 
 /*
- * Return default DNS server IP address. The caller should free it.
- */
-char *mgos_wifi_get_sta_default_dns(void);
-
-/*
  * Returns RSSI of the station if connected to an AP, otherwise 0.
  * Note: RSSI is a negative number.
  */

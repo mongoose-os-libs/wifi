@@ -33,9 +33,13 @@
 #include "common/queue.h"
 
 #include "mgos_hal.h"
+#include "mgos_lwip.h"
 #include "mgos_net_hal.h"
 #include "mgos_sys_config.h"
 #include "mgos_wifi_hal.h"
+
+#include "lwip/dhcp.h"
+#include "lwip/netif.h"
 
 static bool s_inited = false;
 static bool s_started = false;
@@ -574,16 +578,12 @@ bool mgos_wifi_dev_sta_disconnect(void) {
 
 bool mgos_wifi_dev_get_ip_info(int if_instance,
                                struct mgos_net_ip_info *ip_info) {
-  esp_netif_ip_info_t info;
-  esp_netif_t *netif = esp_netif_get_handle_from_ifkey(
+  esp_netif_t *esp_netif = esp_netif_get_handle_from_ifkey(
       if_instance == 0 ? "WIFI_STA_DEF" : "WIFI_AP_DEF");
-  if ((esp_netif_get_ip_info(netif, &info) != ESP_OK) || info.ip.addr == 0) {
-    return false;
-  }
-  ip_info->ip.sin_addr.s_addr = info.ip.addr;
-  ip_info->netmask.sin_addr.s_addr = info.netmask.addr;
-  ip_info->gw.sin_addr.s_addr = info.gw.addr;
-  return true;
+  if (esp_netif == NULL) return false;
+  struct netif *nif = esp_netif_get_lwip_netif(esp_netif);
+  const struct mgos_config_wifi_sta *cfg = mgos_wifi_get_connected_sta_cfg();
+  return mgos_lwip_if_get_ip_info(nif, (cfg ? cfg->nameserver : NULL), ip_info);
 }
 
 void mgos_wifi_dev_init(void) {
@@ -602,19 +602,6 @@ void mgos_wifi_dev_deinit(void) {
     esp_wifi_deinit();
     s_inited = false;
   }
-}
-
-char *mgos_wifi_get_sta_default_dns() {
-  char *dns = NULL;
-  const ip_addr_t *dns_addr = dns_getserver(0);
-  if (dns_addr == NULL || dns_addr->u_addr.ip4.addr == 0 ||
-      dns_addr->type != IPADDR_TYPE_V4) {
-    return NULL;
-  }
-  if (asprintf(&dns, IPSTR, IP2STR(&dns_addr->u_addr.ip4)) < 0) {
-    return NULL;
-  }
-  return dns;
 }
 
 int mgos_wifi_sta_get_rssi(void) {
