@@ -92,6 +92,8 @@ conds:
 
   - when: mos.platform == "esp32"
     apply:
+      libs:
+        - location: https://github.com/mongoose-os-libs/lwip
       config_schema:
         - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
         - ["wifi.ap.bandwidth_20mhz", "b", false, {title: "enable 20MHz bandwidth AP operation"}]
