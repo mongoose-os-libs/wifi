@@ -473,9 +473,16 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
     struct netif *sta_if = eagle_lwip_getif(STATION_IF);
     if (sta_if != NULL) {
       struct dhcp *dhcp = sta_if->dhcp;
-      if (dhcp != NULL) {
+      const struct mgos_config_wifi_sta *cfg = mgos_wifi_get_connected_sta_cfg();
+      if (cfg != NULL && !mgos_conf_str_empty(cfg->nameserver)) {
+        mgos_net_str_to_ip(cfg->nameserver, &ip_info->dns);
+      } else if (dhcp != NULL) {
         ip_info->dns.sin_addr.s_addr =
             ip4_addr_get_u32(&dhcp->offered_dns_addr);
+      }
+      if (dhcp != NULL) {
+        ip_info->ntp.sin_addr.s_addr =
+            ip4_addr_get_u32(&dhcp->offered_ntp_addr);
       }
     }
   }
