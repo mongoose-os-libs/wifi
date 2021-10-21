@@ -334,6 +334,7 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     }
     stacfg->bssid_set = true;
   }
+  stacfg->channel = cfg->channel;
 
   if (mgos_conf_str_empty(cfg->user) /* Not using EAP */ &&
       !mgos_conf_str_empty(cfg->pass)) {

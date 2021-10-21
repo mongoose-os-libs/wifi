@@ -264,6 +264,7 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     }
     sta_cfg.bssid_set = true;
   }
+  sta_cfg.channel = cfg->channel;
   strncpy((char *) sta_cfg.ssid, cfg->ssid, sizeof(sta_cfg.ssid));
 
   if (!mgos_conf_str_empty(cfg->ip) && !mgos_conf_str_empty(cfg->netmask)) {
@@ -473,7 +474,8 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
     struct netif *sta_if = eagle_lwip_getif(STATION_IF);
     if (sta_if != NULL) {
       struct dhcp *dhcp = sta_if->dhcp;
-      const struct mgos_config_wifi_sta *cfg = mgos_wifi_get_connected_sta_cfg();
+      const struct mgos_config_wifi_sta *cfg =
+          mgos_wifi_get_connected_sta_cfg();
       if (cfg != NULL && !mgos_conf_str_empty(cfg->nameserver)) {
         mgos_net_str_to_ip(cfg->nameserver, &ip_info->dns);
       } else if (dhcp != NULL) {
