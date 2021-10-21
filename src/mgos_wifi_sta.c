@@ -31,8 +31,8 @@
 #define MGOS_WIFI_STA_FAILING_AP_RETRY_SECONDS (60 * 60)  // 1 hour
 #endif
 
-#ifndef MGOS_WIFI_STA_AP_HISTORY_SIZE
-#define MGOS_WIFI_STA_AP_HISTORY_SIZE 25
+#ifndef MGOS_WIFI_STA_MAX_AP_HISTORY_LEN
+#define MGOS_WIFI_STA_MAX_AP_HISTORY_LEN 25
 #endif
 
 #ifndef MGOS_WIFI_STA_ROAM_RSSI_HYST
@@ -42,6 +42,10 @@
 #ifndef MGOS_WIFI_STA_MAX_AP_QUEUE_LEN
 #define MGOS_WIFI_STA_MAX_AP_QUEUE_LEN 10
 #endif
+
+// OUI cannot be 0, so checking first 3 bytes is sufficient.
+#define BSSID_EMPTY(bssid) \
+  ((bssid)[0] == 0 && (bssid)[1] == 0 && (bssid)[2] == 0)
 
 void wifi_lock(void);
 void wifi_unlock(void);
@@ -63,20 +67,22 @@ int8_t s_num_cfgs = 0;
 struct mgos_config_wifi_sta **s_cfgs = NULL;
 
 struct wifi_ap_entry {
-  const struct mgos_config_wifi_sta *cfg;
+  struct mgos_config_wifi_sta *cfg;
+  SLIST_ENTRY(wifi_ap_entry) next;
+  uint64_t last_attempt : 56;
+  uint64_t is_wildcard : 1;
   uint8_t bssid[6];
+  int8_t channel;
   int8_t rssi;
   uint8_t num_attempts;
-  int64_t last_attempt;
-  SLIST_ENTRY(wifi_ap_entry) next;
 };
 
-const struct wifi_ap_entry *s_cur_entry = NULL;
+struct wifi_ap_entry *s_cur_entry = NULL;
 static enum wifi_sta_state s_state = WIFI_STA_IDLE;
 static mgos_timer_id s_connect_timer_id = MGOS_INVALID_TIMER_ID;
 // AP is either on the queue or on the history list, not both.
-static SLIST_HEAD(s_ap_queue, wifi_ap_entry) s_ap_queue;
-static SLIST_HEAD(s_ap_history, wifi_ap_entry) s_ap_history;
+SLIST_HEAD(wifi_ap_list, wifi_ap_entry);
+static struct wifi_ap_list s_ap_queue, s_ap_history;
 static int64_t s_last_roam_attempt = 0;
 static bool s_roaming = false;
 static union {
@@ -97,11 +103,19 @@ static void mgos_wifi_sta_free_cfg(struct mgos_config_wifi_sta *cfg) {
   mgos_config_wifi_sta_free(cfg);
 }
 
+static void mgos_wifi_sta_free_ap_entry(struct wifi_ap_entry *ape) {
+  memset(ape, 0, sizeof(*ape));
+  free(ape);
+}
+
 static struct wifi_ap_entry *mgos_wifi_sta_find_history_entry(
     const uint8_t *bssid, const struct mgos_config_wifi_sta *cfg) {
   struct wifi_ap_entry *ape = NULL;
+  bool is_wildcard = BSSID_EMPTY(bssid);
   SLIST_FOREACH(ape, &s_ap_history, next) {
-    if (ape->cfg == cfg && memcmp(ape->bssid, bssid, sizeof(ape->bssid)) == 0) {
+    if (ape->cfg != cfg) continue;
+    if (ape->is_wildcard != is_wildcard) continue;
+    if (is_wildcard || memcmp(ape->bssid, bssid, sizeof(ape->bssid)) == 0) {
       return ape;
     }
   }
@@ -120,9 +134,9 @@ static void mgos_wifi_sta_add_history_entry(struct wifi_ap_entry *ape) {
     num++;
     if (ape->last_attempt < oldest->last_attempt) oldest = ape;
   }
-  if (num > MGOS_WIFI_STA_AP_HISTORY_SIZE) {
+  if (num > MGOS_WIFI_STA_MAX_AP_HISTORY_LEN) {
     mgos_wifi_sta_remove_history_entry(oldest);
-    free(oldest);
+    mgos_wifi_sta_free_ap_entry(oldest);
   }
 }
 
@@ -131,6 +145,19 @@ static const char *mgos_wifi_sta_bssid_to_str(const uint8_t *bssid,
   snprintf(bssid_s, 20, "%02x:%02x:%02x:%02x:%02x:%02x", bssid[0], bssid[1],
            bssid[2], bssid[3], bssid[4], bssid[5]);
   return bssid_s;
+}
+
+static bool mgos_wifi_sta_bssid_from_str(const char *bssid_s, uint8_t *bssid) {
+  if (bssid_s == NULL) return false;
+  unsigned int bi[6] = {0};
+  if (sscanf(bssid_s, "%02x:%02x:%02x:%02x:%02x:%02x", &bi[0], &bi[1], &bi[2],
+             &bi[3], &bi[4], &bi[5]) != 6) {
+    return false;
+  }
+  for (int i = 0; i < 6; i++) {
+    bssid[i] = bi[i];
+  }
+  return true;
 }
 
 static void mgos_wifi_sta_run_cb(void *arg) {
@@ -155,11 +182,11 @@ static void mgos_wifi_sta_set_timeout(bool run_now) {
 }
 
 static bool check_ap(const struct mgos_wifi_scan_result *e,
-                     const struct mgos_config_wifi_sta **sta_cfg,
-                     int *cfg_index, bool check_history,
-                     struct wifi_ap_entry **hape, const char **reason) {
+                     struct mgos_config_wifi_sta **sta_cfg, int *cfg_index,
+                     bool check_history, struct wifi_ap_entry **hape,
+                     const char **reason) {
   for (int i = 0; i < s_num_cfgs; i++) {
-    const struct mgos_config_wifi_sta *cfg = s_cfgs[i];
+    struct mgos_config_wifi_sta *cfg = s_cfgs[i];
     if (*sta_cfg != NULL) {  // Continue iterating from last config.
       if (cfg == *sta_cfg) {
         // Start checking for real from the next entry.
@@ -191,13 +218,16 @@ static bool check_ap(const struct mgos_wifi_scan_result *e,
         if (!have_pass) continue;
         break;
     }
-    // If the config specifies a particular BSSID, check it.
-    if (!mgos_conf_str_empty(cfg->bssid)) {
+    // If the config specifies a particular BSSID and/or channel, check them.
+    if (!mgos_conf_str_empty(cfg->bssid) && cfg->bssid[0] != '*') {
       char bssid_s[20];
       mgos_wifi_sta_bssid_to_str(e->bssid, bssid_s);
       if (strcasecmp(cfg->bssid, bssid_s) != 0) {
         continue;
       }
+    }
+    if (cfg->channel > 0 && cfg->channel != e->channel) {
+      continue;
     }
     *sta_cfg = cfg;
     *cfg_index = i;
@@ -236,7 +266,7 @@ static void mgos_wifi_sta_build_queue(int num_res,
                                       bool check_history, uint32_t *seen_cfg) {
   for (int i = 0; i < num_res; i++) {
     const struct mgos_wifi_scan_result *e = &res[i];
-    const struct mgos_config_wifi_sta *cfg = NULL;
+    struct mgos_config_wifi_sta *cfg = NULL;
     int cfg_index = -1;
     bool first = true;
     while (true) {
@@ -245,8 +275,8 @@ static void mgos_wifi_sta_build_queue(int num_res,
       bool ok = check_ap(e, &cfg, &cfg_index, check_history, &eape, &reason);
       if (ok || first) {
         LOG(LL_DEBUG,
-            ("  %d: SSID: %-32s, BSSID: %02x:%02x:%02x:%02x:%02x:%02x "
-             "auth: %d, ch: %3d, RSSI: %2d - %s cfg %d att %d",
+            ("  %d: SSID %-32s BSSID %02x:%02x:%02x:%02x:%02x:%02x "
+             "auth %d, ch %2d, RSSI %2d - %s cfg %d att %d",
              i, e->ssid, e->bssid[0], e->bssid[1], e->bssid[2], e->bssid[3],
              e->bssid[4], e->bssid[5], e->auth_mode, e->channel, e->rssi,
              reason, cfg_index, (eape ? eape->num_attempts : -1)));
@@ -301,6 +331,7 @@ static void mgos_wifi_sta_build_queue(int num_res,
         if (eape == NULL) return;
         eape->cfg = cfg;
         eape->rssi = e->rssi;
+        eape->channel = e->channel;
         if (pape != NULL) {
           SLIST_INSERT_AFTER(pape, eape, next);
         } else {
@@ -323,7 +354,7 @@ static void mgos_wifi_sta_build_queue(int num_res,
               if (ape->num_attempts > 0) {
                 mgos_wifi_sta_add_history_entry(ape);
               } else {
-                free(ape);
+                mgos_wifi_sta_free_ap_entry(ape);
                 if (eape == ape) eape = NULL;
               }
               break;
@@ -338,12 +369,36 @@ static void mgos_wifi_sta_build_queue(int num_res,
   }
 }
 
+static void mgos_wifi_sta_dump_list(const struct wifi_ap_list *list,
+                                    const char *name) {
+  if (SLIST_EMPTY(list)) return;
+  int i = 0;
+  struct wifi_ap_entry *ape = NULL;
+  LOG(LL_DEBUG, ("AP %s:", name));
+  int64_t now = mgos_uptime_micros();
+  SLIST_FOREACH(ape, list, next) {
+    const uint8_t *bssid = &ape->bssid[0];
+    int age = -1;
+    if (ape->last_attempt > 0) {
+      age = (now - ape->last_attempt) / 1000000;
+    }
+    LOG(LL_DEBUG,
+        ("  %d: SSID %-32s, BSSID %02x:%02x:%02x:%02x:%02x:%02x "
+         "ch %2d RSSI %2d cfg %d att %u wc %d age %d",
+         i, ape->cfg->ssid, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4],
+         bssid[5], ape->channel, ape->rssi, get_cfg_index(ape->cfg),
+         ape->num_attempts, ape->is_wildcard, age));
+    (void) bssid;
+    i++;
+  }
+}
+
 void mgos_wifi_sta_scan_cb(int num_res, struct mgos_wifi_scan_result *res,
                            void *arg) {
   if (s_state != WIFI_STA_SCANNING) return;
   LOG(LL_DEBUG, ("WiFi scan result: %d entries", num_res));
   if (num_res < 0) {
-    s_state = WIFI_STA_SCAN;
+    s_state = WIFI_STA_SCAN;  // Retry.
     return;
   }
   uint32_t seen_cfg = 0;
@@ -355,9 +410,9 @@ void mgos_wifi_sta_scan_cb(int num_res, struct mgos_wifi_scan_result *res,
                               &seen_cfg);
   }
   // If we found absolutely no APs for a config that is enabled,
-  // insert a non-specific entry in case it's a hidden SSID.
+  // insert a non-specific/wildcard entry in case it's a hidden network.
   for (int cfg_index = 0; cfg_index < s_num_cfgs; cfg_index++) {
-    const struct mgos_config_wifi_sta *cfg = s_cfgs[cfg_index];
+    struct mgos_config_wifi_sta *cfg = s_cfgs[cfg_index];
     if (!cfg->enable) continue;
     if (seen_cfg & (1 << cfg_index)) continue;
     bool found = false;
@@ -375,36 +430,28 @@ void mgos_wifi_sta_scan_cb(int num_res, struct mgos_wifi_scan_result *res,
       }
     }
     if (found) continue;
-    uint8_t bssid[6] = {0};
+    uint8_t bssid[6];
+    if (!mgos_wifi_sta_bssid_from_str(cfg->bssid, bssid)) {
+      memset(bssid, 0, sizeof(bssid));  // Wildcard.
+    }
     struct wifi_ap_entry *eape = mgos_wifi_sta_find_history_entry(bssid, cfg);
     if (eape == NULL) {
       eape = calloc(1, sizeof(*eape));
+      if (eape == NULL) return;
       eape->cfg = cfg;
+      eape->is_wildcard = BSSID_EMPTY(bssid);
+      eape->channel = cfg->channel;
     } else {
       mgos_wifi_sta_remove_history_entry(eape);
     }
-    if (eape == NULL) return;
     if (pape != NULL) {
       SLIST_INSERT_AFTER(pape, eape, next);
     } else {
       SLIST_INSERT_HEAD(&s_ap_queue, eape, next);
     }
   }
-  if (!SLIST_EMPTY(&s_ap_queue)) {
-    int i = 0;
-    struct wifi_ap_entry *ape = NULL;
-    LOG(LL_DEBUG, ("AP queue:"));
-    SLIST_FOREACH(ape, &s_ap_queue, next) {
-      const uint8_t *bssid = &ape->bssid[0];
-      LOG(LL_DEBUG,
-          ("  %d: SSID: %-32s, BSSID: %02x:%02x:%02x:%02x:%02x:%02x "
-           "RSSI %d cfg %d att %u",
-           i, ape->cfg->ssid, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4],
-           bssid[5], ape->rssi, get_cfg_index(ape->cfg), ape->num_attempts));
-      (void) bssid;
-      i++;
-    }
-  }
+  mgos_wifi_sta_dump_list(&s_ap_queue, "queue");
+  mgos_wifi_sta_dump_list(&s_ap_history, "history");
   s_state = WIFI_STA_CONNECT;
   mgos_wifi_sta_set_timeout(true /* run_now */);
   (void) arg;
@@ -414,7 +461,11 @@ static void mgos_wifi_sta_empty_queue(void) {
   while (!SLIST_EMPTY(&s_ap_queue)) {
     struct wifi_ap_entry *ape = SLIST_FIRST(&s_ap_queue);
     SLIST_REMOVE_HEAD(&s_ap_queue, next);
-    mgos_wifi_sta_add_history_entry(ape);
+    if (ape->last_attempt != 0) {
+      mgos_wifi_sta_add_history_entry(ape);
+    } else {
+      mgos_wifi_sta_free_ap_entry(ape);
+    }
   }
 }
 
@@ -422,17 +473,58 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
   LOG(LL_DEBUG, ("State %d ev %d timeout %d", s_state, wifi_ev, timeout));
   if (wifi_ev == MGOS_WIFI_EV_STA_DISCONNECTED) {
     s_roaming = false;
-    s_cur_entry = NULL;
   }
   switch (s_state) {
     case WIFI_STA_IDLE:
       break;
     case WIFI_STA_INIT:
       mgos_wifi_dev_sta_disconnect();
-      s_state = WIFI_STA_SCAN;
-      mgos_wifi_sta_set_timeout(true /* run_now */);
       s_roaming = false;
       s_cur_entry = NULL;
+      mgos_wifi_sta_empty_queue();
+      // See if we can pre-populate the queue with saved entries.
+      // We iterate backwards to ensure correct priority of the queue.
+      // Note that with the code as it is now, we can get stuck on a lower
+      // priority config as long as quick connect entry works.
+      // Is this bad? Is it more important to quickly connect to a secondary
+      // network or hop back on primary when it becomes available? Not sure.
+      // Let's wait and see if users complain about this behavior.
+      for (int i = s_num_cfgs - 1; i >= 0; i--) {
+        struct mgos_config_wifi_sta *cfg = s_cfgs[i];
+        if (!cfg->enable) continue;
+        if (mgos_conf_str_empty(cfg->bssid)) continue;
+        uint8_t bssid[6];
+        const char *bssid_s = cfg->bssid;
+        if (bssid_s[0] == '*') bssid_s++;
+        if (!mgos_wifi_sta_bssid_from_str(bssid_s, bssid)) {
+          continue;
+        }
+        bool found = true;
+        struct wifi_ap_entry *ape =
+            mgos_wifi_sta_find_history_entry(bssid, cfg);
+        if (ape == NULL) {
+          found = false;
+          ape = calloc(1, sizeof(*ape));
+          if (ape == NULL) break;
+          ape->cfg = cfg;
+          memcpy(ape->bssid, bssid, sizeof(ape->bssid));
+        }
+        if (cfg->channel >= 0) {
+          ape->channel = cfg->channel;
+        } else {
+          ape->channel = -cfg->channel;
+        }
+        if (found) mgos_wifi_sta_remove_history_entry(ape);
+        SLIST_INSERT_HEAD(&s_ap_queue, ape, next);
+      }
+      if (!SLIST_EMPTY(&s_ap_queue)) {
+        mgos_wifi_sta_dump_list(&s_ap_queue, "queue");
+        mgos_wifi_sta_dump_list(&s_ap_history, "history");
+        s_state = WIFI_STA_CONNECT;
+      } else {
+        s_state = WIFI_STA_SCAN;
+      }
+      mgos_wifi_sta_set_timeout(true /* run_now */);
       break;
     case WIFI_STA_SCAN:
       LOG(LL_DEBUG, ("Starting scan"));
@@ -495,7 +587,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
       if (ape == NULL) {
         LOG(LL_INFO, ("No candidate APs"));
         s_state = WIFI_STA_SCAN;
-        mgos_wifi_sta_set_timeout(false /* run_now */);
+        mgos_wifi_sta_set_timeout_n(2000, false /* run_now */);
         break;
       }
       ape->num_attempts++;
@@ -509,18 +601,26 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
           ape2->num_attempts /= 2;
         }
       }
-      uint8_t *bssid = &ape->bssid[0];
-      LOG(LL_INFO,
-          ("Trying %s AP %02x:%02x:%02x:%02x:%02x:%02x RSSI %d cfg %d att %d",
-           ape->cfg->ssid, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4],
-           bssid[5], ape->rssi, get_cfg_index(ape->cfg), ape->num_attempts));
-      ape->last_attempt = mgos_uptime_micros();
       struct mgos_config_wifi_sta sta_cfg = *ape->cfg;
-      char bssid_s[20];
-      if (ape->rssi != 0) {
-        sta_cfg.bssid = bssid_s;
+      if (!ape->is_wildcard) {
+        char bssid_s[20];
+        const uint8_t *bssid = &ape->bssid[0];
         mgos_wifi_sta_bssid_to_str(bssid, bssid_s);
+        sta_cfg.bssid = bssid_s;
+        sta_cfg.channel = ape->channel;
+        LOG(LL_INFO,
+            ("Trying %s AP %02x:%02x:%02x:%02x:%02x:%02x ch %d RSSI %2d "
+             "cfg %d att %d",
+             ape->cfg->ssid, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4],
+             bssid[5], ape->channel, ape->rssi, get_cfg_index(ape->cfg),
+             ape->num_attempts));
+      } else {
+        sta_cfg.bssid = NULL;
+        sta_cfg.channel = 0;
+        LOG(LL_INFO, ("Trying %s cfg %d AP (auto) att %d", ape->cfg->ssid,
+                      get_cfg_index(ape->cfg), ape->num_attempts));
       }
+      ape->last_attempt = mgos_uptime_micros();
       mgos_wifi_dev_sta_setup(&sta_cfg);
       mgos_wifi_dev_sta_connect();
       s_state = WIFI_STA_CONNECTING;
@@ -532,28 +632,47 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
       break;
     }
     case WIFI_STA_CONNECTING: {
+      struct wifi_ap_entry *ape = SLIST_FIRST(&s_ap_queue);
+      struct mgos_config_wifi_sta *cfg = ape->cfg;
       if (wifi_ev == MGOS_WIFI_EV_STA_DISCONNECTED || timeout) {
         LOG(LL_INFO, ("Connect failed"));
         // Remove the queue entry that failed.
-        struct wifi_ap_entry *ape = SLIST_FIRST(&s_ap_queue);
         SLIST_REMOVE_HEAD(&s_ap_queue, next);
         mgos_wifi_sta_add_history_entry(ape);
         // Stop connection attempts and let things settle before moving on.
         mgos_wifi_dev_sta_disconnect();
         s_cur_entry = NULL;
+        // Reset quick connect settings for this config.
+        {
+          if (!mgos_conf_str_empty(cfg->bssid) && cfg->bssid[0] == '*') {
+            mgos_conf_set_str(&cfg->bssid, NULL);
+          }
+          if (ape->cfg->channel < 0) {
+            ape->cfg->channel = 0;
+          }
+          // We do not save config at this point, it will be saved when we
+          // eventually connect.
+        }
         s_state = WIFI_STA_WAIT_CONNECT;
         mgos_wifi_sta_set_timeout_n(1000, false /* run_now */);
         break;
       }
       if (wifi_ev == MGOS_WIFI_EV_STA_CONNECTED) {
-        s_cur_entry = SLIST_FIRST(&s_ap_queue);
+        const struct mgos_wifi_sta_connected_arg *ea = ev_data;
+        // Whatever we thought we were connecting to,
+        // this is what we ended up with.
+        ape->channel = ea->channel;
+        memcpy(ape->bssid, ea->bssid, sizeof(s_cur_entry->bssid));
+        ape->rssi = ea->rssi;
+        s_cur_entry = ape;
         s_state = WIFI_STA_CONNECTED;
       }
       break;
     }
     case WIFI_STA_CONNECTED: {
       if (wifi_ev == MGOS_WIFI_EV_STA_IP_ACQUIRED) {
-        struct wifi_ap_entry *ape = SLIST_FIRST(&s_ap_queue);
+        struct wifi_ap_entry *ape = (struct wifi_ap_entry *) s_cur_entry;
+        struct mgos_config_wifi_sta *cfg = ape->cfg;
         ape->num_attempts = 0;
         mgos_wifi_sta_empty_queue();
         s_state = WIFI_STA_IP_ACQUIRED;
@@ -561,6 +680,25 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         for (int i = 0; i < (int) ARRAY_SIZE(s_rssi_info.samples); i++) {
           s_rssi_info.samples[i] = cur_rssi;
         }
+        // Save the AP that we connected to, for quick reconnect.
+        if (ape->channel != 0 && !BSSID_EMPTY(ape->bssid) &&
+            cfg->channel <= 0 &&
+            (mgos_conf_str_empty(cfg->bssid) || cfg->bssid[0] == '*')) {
+          char bssid_s[20] = {'*'};
+          mgos_wifi_sta_bssid_to_str(ape->bssid, bssid_s + 1);
+          bool changed = (-ape->channel != cfg->channel ||
+                          mgos_conf_str_empty(cfg->bssid));
+          if (!changed) changed = strcasecmp(cfg->bssid, bssid_s);
+          if (changed) {
+            cfg->channel = -ape->channel;
+            mgos_conf_set_str(&cfg->bssid, bssid_s);
+            LOG(LL_INFO, ("Saving AP %s %s ch %d", cfg->ssid, bssid_s + 1,
+                          ape->channel));
+            mgos_sys_config_save(&mgos_sys_config, false /* try_once */,
+                                 NULL /* msg */);
+          }
+        }
+        mgos_wifi_sta_dump_list(&s_ap_history, "history");
         break;
       }
       int cur_rssi = mgos_wifi_sta_get_rssi();
@@ -574,8 +712,10 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
     }
     case WIFI_STA_IP_ACQUIRED: {
       int cur_rssi = mgos_wifi_sta_get_rssi();
+      s_cur_entry->rssi = cur_rssi;
       if (wifi_ev == MGOS_WIFI_EV_STA_DISCONNECTED || cur_rssi == 0) {
         s_state = WIFI_STA_INIT;
+        s_cur_entry = NULL;
         mgos_wifi_sta_set_timeout_n(1000, false /* run_now */);
         break;
       }
@@ -602,7 +742,6 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
     case WIFI_STA_SHUTDOWN:
       break;
   }
-  (void) ev_data;
 }
 
 void mgos_wifi_sta_ev_handler(int ev, void *evd, void *cb_arg) {
@@ -754,12 +893,12 @@ void mgos_wifi_sta_clear_cfgs(void) {
   while (!SLIST_EMPTY(&s_ap_queue)) {
     struct wifi_ap_entry *ape = SLIST_FIRST(&s_ap_queue);
     SLIST_REMOVE_HEAD(&s_ap_queue, next);
-    free(ape);
+    mgos_wifi_sta_free_ap_entry(ape);
   }
   while (!SLIST_EMPTY(&s_ap_history)) {
     struct wifi_ap_entry *ape = SLIST_FIRST(&s_ap_history);
     SLIST_REMOVE_HEAD(&s_ap_history, next);
-    free(ape);
+    mgos_wifi_sta_free_ap_entry(ape);
   }
   for (int i = 0; i < s_num_cfgs; i++) {
     mgos_wifi_sta_free_cfg(s_cfgs[i]);
