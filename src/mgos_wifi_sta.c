@@ -219,7 +219,7 @@ static bool check_ap(const struct mgos_wifi_scan_result *e,
         break;
     }
     // If the config specifies a particular BSSID and/or channel, check them.
-    if (!mgos_conf_str_empty(cfg->bssid) && cfg->bssid[0] != '*') {
+    if (!mgos_conf_str_empty(cfg->bssid)) {
       char bssid_s[20];
       mgos_wifi_sta_bssid_to_str(e->bssid, bssid_s);
       if (strcasecmp(cfg->bssid, bssid_s) != 0) {
@@ -492,11 +492,11 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
       for (int i = s_num_cfgs - 1; i >= 0; i--) {
         struct mgos_config_wifi_sta *cfg = s_cfgs[i];
         if (!cfg->enable) continue;
-        if (mgos_conf_str_empty(cfg->bssid)) continue;
+        if (mgos_conf_str_empty(cfg->last_bssid) || cfg->last_channel == 0) {
+          continue;
+        }
         uint8_t bssid[6];
-        const char *bssid_s = cfg->bssid;
-        if (bssid_s[0] == '*') bssid_s++;
-        if (!mgos_wifi_sta_bssid_from_str(bssid_s, bssid)) {
+        if (!mgos_wifi_sta_bssid_from_str(cfg->last_bssid, bssid)) {
           continue;
         }
         bool found = true;
@@ -509,11 +509,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
           ape->cfg = cfg;
           memcpy(ape->bssid, bssid, sizeof(ape->bssid));
         }
-        if (cfg->channel >= 0) {
-          ape->channel = cfg->channel;
-        } else {
-          ape->channel = -cfg->channel;
-        }
+        ape->channel = cfg->last_channel;
         if (found) mgos_wifi_sta_remove_history_entry(ape);
         SLIST_INSERT_HEAD(&s_ap_queue, ape, next);
       }
@@ -644,12 +640,8 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         s_cur_entry = NULL;
         // Reset quick connect settings for this config.
         {
-          if (!mgos_conf_str_empty(cfg->bssid) && cfg->bssid[0] == '*') {
-            mgos_conf_set_str(&cfg->bssid, NULL);
-          }
-          if (ape->cfg->channel < 0) {
-            ape->cfg->channel = 0;
-          }
+          mgos_conf_set_str(&cfg->last_bssid, NULL);
+          ape->cfg->last_channel = 0;
           // We do not save config at this point, it will be saved when we
           // eventually connect.
         }
@@ -681,19 +673,25 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
           s_rssi_info.samples[i] = cur_rssi;
         }
         // Save the AP that we connected to, for quick reconnect.
-        if (ape->channel != 0 && !BSSID_EMPTY(ape->bssid) &&
-            cfg->channel <= 0 &&
-            (mgos_conf_str_empty(cfg->bssid) || cfg->bssid[0] == '*')) {
-          char bssid_s[20] = {'*'};
-          mgos_wifi_sta_bssid_to_str(ape->bssid, bssid_s + 1);
-          bool changed = (-ape->channel != cfg->channel ||
-                          mgos_conf_str_empty(cfg->bssid));
-          if (!changed) changed = strcasecmp(cfg->bssid, bssid_s);
+        if (ape->channel != 0 && !BSSID_EMPTY(ape->bssid)) {
+          char bssid_s[20] = {0};
+          mgos_wifi_sta_bssid_to_str(ape->bssid, bssid_s);
+          bool changed = (ape->channel != cfg->last_channel ||
+                          mgos_conf_str_empty(cfg->last_bssid));
+          if (!changed) changed = strcasecmp(cfg->last_bssid, bssid_s);
           if (changed) {
-            cfg->channel = -ape->channel;
-            mgos_conf_set_str(&cfg->bssid, bssid_s);
-            LOG(LL_INFO, ("Saving AP %s %s ch %d", cfg->ssid, bssid_s + 1,
-                          ape->channel));
+            mgos_conf_set_str(&cfg->last_bssid, bssid_s);
+            cfg->last_channel = ape->channel;
+            LOG(LL_INFO,
+                ("Saving AP %s %s ch %d", cfg->ssid, bssid_s, ape->channel));
+            // Early version of this code was using bssid prefixed with '*' and
+            // negative channel to store quick connect values.
+            // This was a bad idea that broke backward compatibility,
+            // we no longer do this and clean up such values when possible.
+            if (cfg->channel < 0) cfg->channel = 0;
+            if (!mgos_conf_str_empty(cfg->bssid) && cfg->bssid[0] == '*') {
+              mgos_conf_set_str(&cfg->bssid, NULL);
+            }
             mgos_sys_config_save(&mgos_sys_config, false /* try_once */,
                                  NULL /* msg */);
           }
