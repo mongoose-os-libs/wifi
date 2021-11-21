@@ -85,7 +85,6 @@ conds:
       libs:
         - location: https://github.com/mongoose-os-libs/lwip
       config_schema:
-        - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
         # min/max values are from enum RATE_11{B,G,N}_ID in the SDK, see user_interface.h for declarations.
         - ["wifi.tx_rate_limit_11b", "i", -1, {title: "TX rate limit for 11B mode, ((max << 8) | min)"}]
         - ["wifi.tx_rate_limit_11g", "i", -1, {title: "TX rate limit for 11G mode, ((max << 8) | min)"}]
@@ -98,7 +97,6 @@ conds:
       libs:
         - location: https://github.com/mongoose-os-libs/lwip
       config_schema:
-        - ["wifi.ap.keep_enabled", "b", true, {title: "Keep AP enabled when station is on"}]
         - ["wifi.ap.bandwidth_20mhz", "b", false, {title: "enable 20MHz bandwidth AP operation"}]
         - ["wifi.ap.protocol", "s", "BGN", {title: "802.11 Wi-Fi Protocol for AP Mode, defaults to BGN, can be any combination of BGNLR. Note LR only works between 2 ESP32 devices."}]
         - ["wifi.sta_ps_mode", "i", 0, {title: "Power save mode for station: 0 - none, 1 - min, 2 - max."}]
