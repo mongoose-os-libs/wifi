@@ -682,8 +682,6 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
           if (changed) {
             mgos_conf_set_str(&cfg->last_bssid, bssid_s);
             cfg->last_channel = ape->channel;
-            LOG(LL_INFO,
-                ("Saving AP %s %s ch %d", cfg->ssid, bssid_s, ape->channel));
             // Early version of this code was using bssid prefixed with '*' and
             // negative channel to store quick connect values.
             // This was a bad idea that broke backward compatibility,
@@ -692,8 +690,12 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
             if (!mgos_conf_str_empty(cfg->bssid) && cfg->bssid[0] == '*') {
               mgos_conf_set_str(&cfg->bssid, NULL);
             }
-            mgos_sys_config_save(&mgos_sys_config, false /* try_once */,
-                                 NULL /* msg */);
+            if (is_sys_cfg(cfg)) {
+              LOG(LL_INFO,
+                  ("Saving AP %s %s ch %d", cfg->ssid, bssid_s, ape->channel));
+              mgos_sys_config_save(&mgos_sys_config, false /* try_once */,
+                                   NULL /* msg */);
+            }
           }
         }
         mgos_wifi_sta_dump_list(&s_ap_history, "history");
@@ -752,23 +754,27 @@ void mgos_wifi_sta_ev_handler(int ev, void *evd, void *cb_arg) {
 bool mgos_wifi_connect(void) {
   int ret = true;
   wifi_lock();
-  switch (s_state) {
-    case WIFI_STA_SHUTDOWN:
-      ret = false;
-      break;
-    case WIFI_STA_IDLE:
-      s_state = WIFI_STA_INIT;
-      mgos_wifi_sta_set_timeout(true /* run_now */);
-      break;
-    case WIFI_STA_INIT:
-    case WIFI_STA_SCAN:
-    case WIFI_STA_SCANNING:
-    case WIFI_STA_WAIT_CONNECT:
-    case WIFI_STA_CONNECT:
-    case WIFI_STA_CONNECTING:
-    case WIFI_STA_CONNECTED:
-    case WIFI_STA_IP_ACQUIRED:
-      break;
+  if (s_num_cfgs > 0) {
+    switch (s_state) {
+      case WIFI_STA_SHUTDOWN:
+        ret = false;
+        break;
+      case WIFI_STA_IDLE:
+        s_state = WIFI_STA_INIT;
+        mgos_wifi_sta_set_timeout(true /* run_now */);
+        break;
+      case WIFI_STA_INIT:
+      case WIFI_STA_SCAN:
+      case WIFI_STA_SCANNING:
+      case WIFI_STA_WAIT_CONNECT:
+      case WIFI_STA_CONNECT:
+      case WIFI_STA_CONNECTING:
+      case WIFI_STA_CONNECTED:
+      case WIFI_STA_IP_ACQUIRED:
+        break;
+    }
+  } else {
+    ret = false;
   }
   wifi_unlock();
   return ret;
