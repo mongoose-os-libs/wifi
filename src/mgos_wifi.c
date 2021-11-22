@@ -199,6 +199,8 @@ bool mgos_wifi_setup_sta(const struct mgos_config_wifi_sta *cfg) {
       ret = mgos_wifi_connect();
     }
   } else {
+    // May turn off STA mode, depending on the hardware.
+    mgos_wifi_dev_sta_setup(cfg);
     ret = true;
   }
   return ret;

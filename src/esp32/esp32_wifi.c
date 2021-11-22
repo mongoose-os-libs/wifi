@@ -222,9 +222,7 @@ static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
   }
 
   if (mode == WIFI_MODE_NULL) {
-    if (s_started) {
-      esp_wifi_set_mode(WIFI_MODE_NULL);
-    }
+    esp_wifi_set_mode(mode);
     r = esp_wifi_stop();
     if (r == ESP_ERR_WIFI_NOT_INIT) r = ESP_OK; /* Nothing to stop. */
     if (r == ESP_OK) {
@@ -547,10 +545,13 @@ out:
 
 bool mgos_wifi_dev_sta_connect(void) {
   if ((esp32_wifi_ensure_init() != ESP_OK) ||
-      (esp32_wifi_ensure_start() != ESP_OK))
+      (esp32_wifi_ensure_start() != ESP_OK)) {
     return false;
+  }
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
-  if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) return false;
+  if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) {
+    return false;
+  }
   esp_err_t r = esp_wifi_connect();
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("WiFi STA: Connect failed: %d", r));
@@ -563,11 +564,14 @@ bool mgos_wifi_dev_sta_connect(void) {
 
 bool mgos_wifi_dev_sta_disconnect(void) {
   wifi_mode_t cur_mode = esp32_wifi_get_mode();
-  if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) return false;
+  if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) {
+    return false;
+  }
   esp_wifi_disconnect();
   s_connecting = false;
   /* If we are in station-only mode, stop WiFi task as well. */
   if (cur_mode == WIFI_MODE_STA) {
+    esp_wifi_set_mode(WIFI_MODE_NULL);
     esp_err_t r = esp_wifi_stop();
     if (r == ESP_ERR_WIFI_NOT_INIT) r = ESP_OK; /* Nothing to stop. */
     if (r == ESP_OK) {
