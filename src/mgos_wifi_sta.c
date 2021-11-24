@@ -389,8 +389,10 @@ static void mgos_wifi_sta_dump_list(const struct wifi_ap_list *list,
          bssid[5], ape->channel, ape->rssi, get_cfg_index(ape->cfg),
          ape->num_attempts, ape->is_wildcard, age));
     (void) bssid;
+    (void) age;
     i++;
   }
+  (void) name;
 }
 
 void mgos_wifi_sta_scan_cb(int num_res, struct mgos_wifi_scan_result *res,
