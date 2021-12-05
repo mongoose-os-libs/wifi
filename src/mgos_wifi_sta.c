@@ -556,8 +556,7 @@ static void mgos_wifi_sta_run(int wifi_ev, void *ev_data, bool timeout) {
         } else if (s_cur_entry != NULL && memcmp(s_cur_entry->bssid, ape->bssid,
                                                  sizeof(ape->bssid)) == 0) {
           LOG(LL_INFO, ("Current AP is best AP"));
-        } else if (ape->rssi <= mgos_sys_config_get_wifi_sta_roam_rssi_thr() ||
-                   (ape->rssi - MGOS_WIFI_STA_ROAM_RSSI_HYST) < cur_rssi) {
+        } else if (ape->rssi - MGOS_WIFI_STA_ROAM_RSSI_HYST < cur_rssi) {
           LOG(LL_INFO, ("Best AP is not much better (RSSI %d vs %d)", ape->rssi,
                         cur_rssi));
         } else {
