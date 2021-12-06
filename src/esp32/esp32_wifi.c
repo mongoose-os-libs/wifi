@@ -409,8 +409,13 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
         LOG(LL_ERROR, ("Failed to read %s", cfg->ca_cert));
         goto out;
       }
+      /* For mbedTLS to parse certificate as PEM, mbedtls_x509_crt_parse needs
+       * teh blob to be NUL terminated and NUL byte included in the blob length.
+       * Luckily, cs_read_file is nice enough to NUL-terminate the data for us
+       * (just in case) though it returns size without the NUL.
+       * Hence the len + 1 below. */
       esp_wifi_sta_wpa2_ent_set_ca_cert((unsigned char *) s_ca_cert_pem,
-                                        (int) len);
+                                        (int) len + 1);
     } else {
       esp_wifi_sta_wpa2_ent_clear_ca_cert();
     }
@@ -430,8 +435,8 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
         goto out;
       }
       esp_wifi_sta_wpa2_ent_set_cert_key(
-          (unsigned char *) s_cert_pem, (int) cert_len,
-          (unsigned char *) s_key_pem, (int) key_len,
+          (unsigned char *) s_cert_pem, (int) cert_len + 1,
+          (unsigned char *) s_key_pem, (int) key_len + 1,
           NULL /* private_key_passwd */, 0 /* private_key_passwd_len */);
     } else {
       esp_wifi_sta_wpa2_ent_clear_cert_key();
