@@ -130,15 +130,7 @@ static bool mgos_wifi_set_mode(uint8_t mode) {
   s_cur_mode = mode;
 
   if (mode == STATION_MODE) {
-    /*
-     * Turn off modem sleep.
-     * There is just no end to misery with it on.
-     * https://github.com/espressif/ESP8266_NONOS_SDK/issues/119 is particularly
-     * bad, but even without it there are regular disconnections reported by
-     * multiple people (and observed by us), sometimes with device never coming
-     * back (disconnect event getting lost).
-     */
-    wifi_set_sleep_type(NONE_SLEEP_T);
+    wifi_set_sleep_type(mgos_sys_config_get_wifi_sta_ps_mode());
   } else {
     /* When AP is active, modem sleep is not active anyway. */
   }

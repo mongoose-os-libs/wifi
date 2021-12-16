@@ -85,6 +85,7 @@ conds:
       libs:
         - location: https://github.com/mongoose-os-libs/lwip
       config_schema:
+        - ["wifi.sta_ps_mode", "i", 0, {title: "WiFi sleep mode: 0 - none, 1 - light, 2 - modem"}]
         # min/max values are from enum RATE_11{B,G,N}_ID in the SDK, see user_interface.h for declarations.
         - ["wifi.tx_rate_limit_11b", "i", -1, {title: "TX rate limit for 11B mode, ((max << 8) | min)"}]
         - ["wifi.tx_rate_limit_11g", "i", -1, {title: "TX rate limit for 11G mode, ((max << 8) | min)"}]
