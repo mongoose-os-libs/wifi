@@ -26,6 +26,7 @@
 
 #include "mgos_gpio.h"
 #include "mgos_mongoose.h"
+#include "mgos_net.h"
 #include "mgos_net_hal.h"
 #include "mgos_sys_config.h"
 #include "mgos_system.h"
@@ -143,12 +144,46 @@ bool mgos_wifi_validate_sta_cfg(const struct mgos_config_wifi_sta *cfg,
   }
   if (!mgos_conf_str_empty(cfg->ip)) {
     if (mgos_conf_str_empty(cfg->netmask)) {
-      if (!mg_asprintf(msg, 0,
-                       "Station static IP is set but no netmask provided")) {
+      if (!mg_asprintf(msg, 0, "Static IP is set but no netmask provided")) {
       }
       return false;
     }
-    /* TODO(rojer): More validation here: IP & gw within the same net. */
+    struct sockaddr_in ip, netmask;
+    if (!mgos_net_str_to_ip(cfg->ip, &ip)) {
+      if (!mg_asprintf(msg, 0, "Static %s is invalid", "IP")) {
+      }
+      return false;
+    }
+    if (!mgos_net_str_to_ip(cfg->netmask, &netmask)) {
+      if (!mg_asprintf(msg, 0, "Static %s is invalid", "netmask")) {
+      }
+      return false;
+    }
+    uint32_t nm = ntohl(netmask.sin_addr.s_addr);
+    int num_bits = 0;
+    while ((nm & 0x80000000) != 0) {
+      num_bits++;
+      nm <<= 1;
+    }
+    if (num_bits == 0 || nm != 0) {
+      if (!mg_asprintf(msg, 0, "Static %s is invalid", "netmask")) {
+      }
+      return false;
+    }
+    if (!mgos_conf_str_empty(cfg->gw)) {
+      struct sockaddr_in gw;
+      if (!mgos_net_str_to_ip(cfg->gw, &gw)) {
+        if (!mg_asprintf(msg, 0, "Static %s is invalid", "gateway")) {
+        }
+        return false;
+      }
+      if ((ip.sin_addr.s_addr & netmask.sin_addr.s_addr) !=
+          (gw.sin_addr.s_addr & netmask.sin_addr.s_addr)) {
+        if (!mg_asprintf(msg, 0, "Static %s is invalid", "gateway")) {
+        }
+        return false;
+      }
+    }
   }
   return true;
 }
