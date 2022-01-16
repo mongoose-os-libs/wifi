@@ -99,6 +99,7 @@ conds:
         - location: https://github.com/mongoose-os-libs/lwip
       config_schema:
         - ["wifi.ap.bandwidth_20mhz", "b", false, {title: "enable 20MHz bandwidth AP operation"}]
+        - ["wifi.ap.ipv4_nat_enable", "b", false, {title: "Enable IPv4 NAT"}]
         - ["wifi.ap.protocol", "s", "BGN", {title: "802.11 Wi-Fi Protocol for AP Mode, defaults to BGN, can be any combination of BGNLR. Note LR only works between 2 ESP32 devices."}]
         - ["wifi.sta_ps_mode", "i", 0, {title: "Power save mode for station: 0 - none, 1 - min, 2 - max."}]
         - ["wifi.sta.protocol", "s", "BGN", {title: "802.11 Wi-Fi Protocol for STA Mode, defaults to BGN, can be any combination of BGNLR. Note LR only works between 2 ESP32 devices."}]
@@ -106,6 +107,7 @@ conds:
       cdefs:
         MGOS_WIFI_ENABLE_AP_STA: 1
       build_vars:
+        MGOS_LWIP_ENABLE_IPV4_NAT: 1
         ESP_IDF_EXTRA_COMPONENTS: >
           ${build_vars.ESP_IDF_EXTRA_COMPONENTS}
           esp_wifi wpa_supplicant

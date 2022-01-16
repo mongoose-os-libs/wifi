@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "dhcpserver/dhcpserver.h"
+#include "dhcpserver/dhcpserver_options.h"
 #include "esp_netif.h"
 #include "esp_netif_types.h"
 #include "esp_wifi.h"
@@ -34,19 +35,45 @@
 
 #include "mgos_hal.h"
 #include "mgos_lwip.h"
+#include "mgos_mongoose.h"
 #include "mgos_net_hal.h"
 #include "mgos_sys_config.h"
+#include "mgos_utils.h"
 #include "mgos_wifi_hal.h"
 
 #include "lwip/dhcp.h"
+#include "lwip/lwip_napt.h"
 #include "lwip/netif.h"
 
 static bool s_inited = false;
 static bool s_started = false;
 static bool s_connecting = false;
+static bool s_ap_nat_enable = false;
 
 static esp_err_t esp32_wifi_add_mode(wifi_mode_t mode);
 static esp_err_t esp32_wifi_remove_mode(wifi_mode_t mode);
+
+static void esp32_wifi_ap_update_dns(void) {
+  dhcps_offer_t v = (s_ap_nat_enable ? OFFER_DNS : 0);
+  if (v) {
+    ip_addr_t dns_ip;
+    const char *dns = (mgos_get_mgr()->nameserver ?: MGOS_DEFAULT_NAMESERVER);
+    ipaddr_aton(dns, &dns_ip);
+    dhcps_dns_setserver(&dns_ip);
+  }
+  dhcps_set_option_info(DOMAIN_NAME_SERVER, &v, sizeof(v));
+}
+
+static void esp32_wifi_ap_enable_nat(void *arg UNUSED_ARG) {
+  esp_netif_t *esp_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+  if (esp_netif == NULL) return;
+  struct netif *netif = esp_netif_get_lwip_netif(esp_netif);
+  if (netif->napt == s_ap_nat_enable) return;
+  LOG(LL_DEBUG,
+      ("AP NAT %s (addr %s)", (s_ap_nat_enable ? "enable" : "disable"),
+       ip4addr_ntoa(&netif->ip_addr.u_addr.ip4)));
+  ip_napt_enable(netif->ip_addr.u_addr.ip4.addr, s_ap_nat_enable);
+}
 
 static void esp32_wifi_event_handler(void *ctx, esp_event_base_t ev_base,
                                      int32_t ev_id, void *ev_data) {
@@ -76,6 +103,14 @@ static void esp32_wifi_event_handler(void *ctx, esp_event_base_t ev_base,
       memcpy(dei.sta_connected.bssid, info->bssid, 6);
       dei.sta_connected.channel = info->channel;
       s_connecting = false;
+      break;
+    }
+    case WIFI_EVENT_AP_START: {
+      mgos_invoke_cb(esp32_wifi_ap_enable_nat, NULL, false /* from_isr */);
+      break;
+    }
+    case WIFI_EVENT_AP_STOP: {
+      mgos_invoke_cb(esp32_wifi_ap_enable_nat, NULL, false /* from_isr */);
       break;
     }
     case WIFI_EVENT_AP_STACONNECTED: {
@@ -462,6 +497,7 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   wifi_ap_config_t *apcfg = &wcfg.ap;
 
   if (!cfg->enable) {
+    s_ap_nat_enable = false;
     result = (esp32_wifi_remove_mode(WIFI_MODE_AP) == ESP_OK);
     goto out;
   }
@@ -489,17 +525,19 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   while (esp_netif_dhcps_stop(ap_if) !=
          ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
   }
-  {
-    esp_netif_ip_info_t info = {
-        .ip.addr = ipaddr_addr(cfg->ip),
-        .netmask.addr = ipaddr_addr(cfg->netmask),
-    };
-    if (!mgos_conf_str_empty(cfg->gw)) info.gw.addr = ipaddr_addr(cfg->gw);
-    r = esp_netif_set_ip_info(ap_if, &info);
-    if (r != ESP_OK) {
-      LOG(LL_ERROR, ("WiFi AP: Failed to set IP config: %d", r));
-      goto out;
-    }
+  esp_netif_ip_info_t info = {
+      .ip.addr = ipaddr_addr(cfg->ip),
+      .netmask.addr = ipaddr_addr(cfg->netmask),
+  };
+  if (!mgos_conf_str_empty(cfg->gw)) {
+    info.gw.addr = ipaddr_addr(cfg->gw);
+  } else if (cfg->ipv4_nat_enable) {
+    info.gw.addr = info.ip.addr;
+  }
+  r = esp_netif_set_ip_info(ap_if, &info);
+  if (r != ESP_OK) {
+    LOG(LL_ERROR, ("WiFi AP: Failed to set IP config: %d", r));
+    goto out;
   }
   {
     dhcps_lease_t opt = {
@@ -533,15 +571,18 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   if ((r = esp32_wifi_ensure_start()) != ESP_OK) {
     goto out;
   }
+  esp32_wifi_ap_update_dns();
   if ((r = esp_netif_dhcps_start(ap_if)) != ESP_OK &&
       r != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) {
     LOG(LL_ERROR, ("WiFi AP: Failed to start DHCP server: %d", r));
     goto out;
   }
-  LOG(LL_INFO,
-      ("WiFi AP IP: %s/%s gw %s, DHCP range %s - %s", cfg->ip, cfg->netmask,
-       (cfg->gw ? cfg->gw : "(none)"), cfg->dhcp_start, cfg->dhcp_end));
-
+  s_ap_nat_enable = cfg->ipv4_nat_enable;
+  mgos_invoke_cb(esp32_wifi_ap_enable_nat, NULL, false /* from_isr */);
+  ip4_addr_t gw = {.addr = info.gw.addr};
+  LOG(LL_INFO, ("WiFi AP IP: %s/%s gw %s, DHCP range: %s - %s, NAT? %d",
+                cfg->ip, cfg->netmask, (gw.addr ? ip4addr_ntoa(&gw) : "(none)"),
+                cfg->dhcp_start, cfg->dhcp_end, s_ap_nat_enable));
   result = true;
 
 out:
@@ -596,11 +637,20 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
   return mgos_lwip_if_get_ip_info(nif, (cfg ? cfg->nameserver : NULL), ip_info);
 }
 
+void esp32_wifi_net_ev(int ev, void *evd, void *arg) {
+  if (ev != MGOS_NET_EV_IP_ACQUIRED && ev != MGOS_NET_EV_DISCONNECTED) {
+    return;
+  }
+  // Keep AP's DNS offer up to date.
+  esp32_wifi_ap_update_dns();
+}
+
 void mgos_wifi_dev_init(void) {
   esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                              esp32_wifi_event_handler, NULL);
   esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                              esp32_wifi_ip_event_handler, NULL);
+  mgos_event_add_group_handler(MGOS_EVENT_GRP_NET, esp32_wifi_net_ev, NULL);
 }
 
 void mgos_wifi_dev_deinit(void) {
