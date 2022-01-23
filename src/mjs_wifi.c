@@ -18,7 +18,7 @@
 #ifdef MGOS_HAVE_MJS
 
 #include "mgos_wifi.h"
-#include "mos_mjs.h"
+#include "mjs.h"
 
 struct scan_ctx {
   struct mjs *mjs;
