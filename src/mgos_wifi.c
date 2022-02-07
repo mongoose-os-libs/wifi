@@ -330,9 +330,9 @@ bool mgos_wifi_setup(struct mgos_config_wifi *cfg) {
   const struct mgos_config_wifi_ap dummy_ap_cfg = {.enable = false};
   const struct mgos_config_wifi_sta dummy_sta_cfg = {.enable = false};
 
-  const struct mgos_config_wifi_sta *sta_cfg = mgos_sys_config_get_wifi_sta();
-  const struct mgos_config_wifi_sta *sta_cfg1 = mgos_sys_config_get_wifi_sta1();
-  const struct mgos_config_wifi_sta *sta_cfg2 = mgos_sys_config_get_wifi_sta2();
+  const struct mgos_config_wifi_sta *sta_cfg = &cfg->sta;
+  const struct mgos_config_wifi_sta *sta_cfg1 = &cfg->sta1;
+  const struct mgos_config_wifi_sta *sta_cfg2 = &cfg->sta2;
   bool sta_enabled = (sta_cfg->enable || sta_cfg1->enable || sta_cfg2->enable);
 
   if (trigger_ap || (cfg->ap.enable && !sta_enabled)) {
