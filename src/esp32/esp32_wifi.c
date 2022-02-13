@@ -45,6 +45,10 @@
 #include "lwip/lwip_napt.h"
 #include "lwip/netif.h"
 
+#ifndef ESP32_WIFI_AP_CLIENT_TIMEOUT_SEC
+#define ESP32_WIFI_AP_CLIENT_TIMEOUT_SEC 30  // Default is 300, way too long.
+#endif
+
 static bool s_inited = false;
 static bool s_started = false;
 static bool s_connecting = false;
@@ -576,6 +580,7 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
     goto out;
   }
   esp32_wifi_ap_update_dns();
+  esp_wifi_set_inactive_time(WIFI_IF_AP, ESP32_WIFI_AP_CLIENT_TIMEOUT_SEC);
   if ((r = esp_netif_dhcps_start(ap_if)) != ESP_OK &&
       r != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) {
     LOG(LL_ERROR, ("WiFi AP: Failed to start DHCP server: %d", r));
