@@ -215,6 +215,8 @@ static bool check_ap(const struct mgos_wifi_scan_result *e,
       case MGOS_WIFI_AUTH_MODE_WPA_PSK:
       case MGOS_WIFI_AUTH_MODE_WPA2_PSK:
       case MGOS_WIFI_AUTH_MODE_WPA_WPA2_PSK:
+      case MGOS_WIFI_AUTH_MODE_WPA3_PSK:
+      case MGOS_WIFI_AUTH_MODE_WPA2_WPA3_PSK:
         if (!have_pass) continue;
         break;
     }
