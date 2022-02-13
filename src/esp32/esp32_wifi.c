@@ -579,6 +579,9 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
   if ((r = esp32_wifi_ensure_start()) != ESP_OK) {
     goto out;
   }
+#if IP_NAPT
+  s_ap_nat_enable = cfg->ipv4_nat_enable;
+#endif
   esp32_wifi_ap_update_dns();
   esp_wifi_set_inactive_time(WIFI_IF_AP, ESP32_WIFI_AP_CLIENT_TIMEOUT_SEC);
   if ((r = esp_netif_dhcps_start(ap_if)) != ESP_OK &&
@@ -586,9 +589,6 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
     LOG(LL_ERROR, ("WiFi AP: Failed to start DHCP server: %d", r));
     goto out;
   }
-#if IP_NAPT
-  s_ap_nat_enable = cfg->ipv4_nat_enable;
-#endif
   mgos_invoke_cb(esp32_wifi_ap_enable_nat, NULL, false /* from_isr */);
   ip4_addr_t gw = {.addr = info.gw.addr};
   LOG(LL_INFO, ("WiFi AP IP: %s/%s gw %s, DHCP range: %s - %s, NAT? %d",
