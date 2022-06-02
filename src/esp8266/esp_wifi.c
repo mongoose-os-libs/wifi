@@ -128,12 +128,7 @@ static bool mgos_wifi_set_mode(uint8_t mode) {
   }
 
   s_cur_mode = mode;
-
-  if (mode == STATION_MODE) {
-    wifi_set_sleep_type(mgos_sys_config_get_wifi_sta_ps_mode());
-  } else {
-    /* When AP is active, modem sleep is not active anyway. */
-  }
+  wifi_set_sleep_type(mgos_sys_config_get_wifi_sta_ps_mode());
   (void) mode_str;
   return true;
 }
@@ -362,6 +357,8 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     LOG(LL_ERROR, ("WiFi STA: Failed to set host name"));
     return false;
   }
+
+  wifi_set_sleep_type(mgos_sys_config_get_wifi_sta_ps_mode());
 
   return true;
 }

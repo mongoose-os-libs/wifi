@@ -241,14 +241,6 @@ static esp_err_t esp32_wifi_ensure_start(void) {
       LOG(LL_ERROR, ("Failed to start WiFi: %d", r));
       goto out;
     }
-    wifi_ps_type_t cur_ps_mode = WIFI_PS_NONE;
-    esp_wifi_get_ps(&cur_ps_mode);
-    wifi_ps_type_t want_ps_mode =
-        (wifi_ps_type_t) mgos_sys_config_get_wifi_sta_ps_mode();
-    if (cur_ps_mode != want_ps_mode) {
-      LOG(LL_DEBUG, ("WiFi PS %d -> %d", cur_ps_mode, want_ps_mode));
-      esp_wifi_set_ps(want_ps_mode);
-    }
   }
 out:
   return r;
@@ -489,6 +481,10 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   } else {
     esp_wifi_sta_wpa2_ent_disable();
   }
+
+  wifi_ps_type_t want_ps_mode =
+      (wifi_ps_type_t) mgos_sys_config_get_wifi_sta_ps_mode();
+  esp_wifi_set_ps(want_ps_mode);
 
   result = true;
 
