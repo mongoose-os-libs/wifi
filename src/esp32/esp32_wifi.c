@@ -61,7 +61,8 @@ static void esp32_wifi_ap_update_dns(void) {
   dhcps_offer_t v = (s_ap_nat_enable ? OFFER_DNS : 0);
   if (v) {
     ip_addr_t dns_ip;
-    const char *dns = (mgos_get_mgr()->nameserver ?: MGOS_DEFAULT_NAMESERVER);
+    const char *dns = (mgos_get_mgr()->nameserver
+                           ?: CS_STRINGIFY_MACRO(MGOS_DEFAULT_NAMESERVER));
     ipaddr_aton(dns, &dns_ip);
     dhcps_dns_setserver(&dns_ip);
   }
