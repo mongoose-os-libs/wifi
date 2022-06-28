@@ -101,6 +101,7 @@ static bool is_sys_cfg(const struct mgos_config_wifi_sta *cfg) {
 static void mgos_wifi_sta_free_cfg(struct mgos_config_wifi_sta *cfg) {
   if (is_sys_cfg(cfg)) return;
   mgos_config_wifi_sta_free(cfg);
+  free(cfg);
 }
 
 static void mgos_wifi_sta_free_ap_entry(struct wifi_ap_entry *ape) {
