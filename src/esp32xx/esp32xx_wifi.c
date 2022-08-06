@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-#include "esp32_wifi.h"
-
 #include <stdbool.h>
 #include <string.h>
 
@@ -54,10 +52,10 @@ static bool s_started = false;
 static bool s_connecting = false;
 static bool s_ap_nat_enable = false;
 
-static esp_err_t esp32_wifi_add_mode(wifi_mode_t mode);
-static esp_err_t esp32_wifi_remove_mode(wifi_mode_t mode);
+static esp_err_t esp32xx_wifi_add_mode(wifi_mode_t mode);
+static esp_err_t esp32xx_wifi_remove_mode(wifi_mode_t mode);
 
-static void esp32_wifi_ap_update_dns(void) {
+static void esp32xx_wifi_ap_update_dns(void) {
   dhcps_offer_t v = (s_ap_nat_enable ? OFFER_DNS : 0);
   if (v) {
     ip_addr_t dns_ip;
@@ -69,7 +67,7 @@ static void esp32_wifi_ap_update_dns(void) {
   dhcps_set_option_info(DOMAIN_NAME_SERVER, &v, sizeof(v));
 }
 
-static void esp32_wifi_ap_enable_nat(void *arg UNUSED_ARG) {
+static void esp32xx_wifi_ap_enable_nat(void *arg UNUSED_ARG) {
 #if IP_NAPT
   esp_netif_t *esp_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
   if (esp_netif == NULL) return;
@@ -82,8 +80,8 @@ static void esp32_wifi_ap_enable_nat(void *arg UNUSED_ARG) {
 #endif
 }
 
-static void esp32_wifi_event_handler(void *ctx, esp_event_base_t ev_base,
-                                     int32_t ev_id, void *ev_data) {
+static void esp32xx_wifi_event_handler(void *ctx, esp_event_base_t ev_base,
+                                       int32_t ev_id, void *ev_data) {
   struct mgos_wifi_dev_event_info dei = {0};
   switch (ev_id) {
     case WIFI_EVENT_STA_START: {
@@ -113,11 +111,11 @@ static void esp32_wifi_event_handler(void *ctx, esp_event_base_t ev_base,
       break;
     }
     case WIFI_EVENT_AP_START: {
-      mgos_invoke_cb(esp32_wifi_ap_enable_nat, NULL, false /* from_isr */);
+      mgos_invoke_cb(esp32xx_wifi_ap_enable_nat, NULL, false /* from_isr */);
       break;
     }
     case WIFI_EVENT_AP_STOP: {
-      mgos_invoke_cb(esp32_wifi_ap_enable_nat, NULL, false /* from_isr */);
+      mgos_invoke_cb(esp32xx_wifi_ap_enable_nat, NULL, false /* from_isr */);
       break;
     }
     case WIFI_EVENT_AP_STACONNECTED: {
@@ -175,8 +173,8 @@ static void esp32_wifi_event_handler(void *ctx, esp_event_base_t ev_base,
   (void) ev_base;
 }
 
-static void esp32_wifi_ip_event_handler(void *ctx, esp_event_base_t ev_base,
-                                        int32_t ev_id, void *ev_data) {
+static void esp32xx_wifi_ip_event_handler(void *ctx, esp_event_base_t ev_base,
+                                          int32_t ev_id, void *ev_data) {
   struct mgos_wifi_dev_event_info dei = {
       .ev = MGOS_WIFI_EV_STA_IP_ACQUIRED,
   };
@@ -187,7 +185,7 @@ static void esp32_wifi_ip_event_handler(void *ctx, esp_event_base_t ev_base,
   (void) ev_data;
 }
 
-static wifi_mode_t esp32_wifi_get_mode(void) {
+static wifi_mode_t esp32xx_wifi_get_mode(void) {
   wifi_mode_t cur_mode = WIFI_MODE_NULL;
   if (s_inited) {
     if (esp_wifi_get_mode(&cur_mode) != ESP_OK) {
@@ -214,7 +212,7 @@ static int32_t task_create_wrapper_mgos(void *task_func, const char *name,
   return xTaskCreate(task_func, name, stack_depth, param, prio, task_handle);
 }
 
-static esp_err_t esp32_wifi_ensure_init(void) {
+static esp_err_t esp32xx_wifi_ensure_init(void) {
   esp_err_t r = ESP_OK;
   if (!s_inited) {
     g_wifi_osi_funcs._task_create = task_create_wrapper_mgos;
@@ -233,7 +231,7 @@ out:
   return r;
 }
 
-static esp_err_t esp32_wifi_ensure_start(void) {
+static esp_err_t esp32xx_wifi_ensure_start(void) {
   esp_err_t r = ESP_OK;
   if (!s_started) {
     s_connecting = false;
@@ -247,7 +245,7 @@ out:
   return r;
 }
 
-static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
+static esp_err_t esp32xx_wifi_set_mode(wifi_mode_t mode) {
   esp_err_t r;
 
   if ((mode == WIFI_MODE_STA || mode == WIFI_MODE_APSTA) &&
@@ -266,7 +264,7 @@ static esp_err_t esp32_wifi_set_mode(wifi_mode_t mode) {
     goto out;
   }
 
-  r = esp32_wifi_ensure_init();
+  r = esp32xx_wifi_ensure_init();
 
   if (r != ESP_OK) goto out;
 
@@ -279,9 +277,9 @@ out:
   return r;
 }
 
-static esp_err_t esp32_wifi_add_mode(wifi_mode_t mode) {
+static esp_err_t esp32xx_wifi_add_mode(wifi_mode_t mode) {
   esp_err_t r = ESP_OK;
-  wifi_mode_t cur_mode = esp32_wifi_get_mode();
+  wifi_mode_t cur_mode = esp32xx_wifi_get_mode();
   if (cur_mode == mode || cur_mode == WIFI_MODE_APSTA) {
     goto out;
   }
@@ -291,16 +289,16 @@ static esp_err_t esp32_wifi_add_mode(wifi_mode_t mode) {
     mode = WIFI_MODE_APSTA;
   }
 
-  r = esp32_wifi_set_mode(mode);
+  r = esp32xx_wifi_set_mode(mode);
 
 out:
   return r;
 }
 
-static esp_err_t esp32_wifi_remove_mode(wifi_mode_t mode) {
+static esp_err_t esp32xx_wifi_remove_mode(wifi_mode_t mode) {
   esp_err_t r = ESP_OK;
 
-  wifi_mode_t cur_mode = esp32_wifi_get_mode();
+  wifi_mode_t cur_mode = esp32xx_wifi_get_mode();
   if (cur_mode == WIFI_MODE_NULL ||
       (mode == WIFI_MODE_STA && cur_mode == WIFI_MODE_AP) ||
       (mode == WIFI_MODE_AP && cur_mode == WIFI_MODE_STA)) {
@@ -317,7 +315,7 @@ static esp_err_t esp32_wifi_remove_mode(wifi_mode_t mode) {
     mode = WIFI_MODE_STA;
   }
   /* As a result we will always remain in STA-only or AP-only mode. */
-  r = esp32_wifi_set_mode(mode);
+  r = esp32xx_wifi_set_mode(mode);
 
 out:
   return r;
@@ -335,6 +333,33 @@ static esp_err_t wifi_sta_set_host_name(
   return r;
 }
 
+static esp_err_t esp32xx_wifi_protocol_setup(wifi_interface_t ifx,
+                                             const char *prot) {
+  if (mgos_conf_str_empty(prot)) return ESP_OK;
+  uint8_t protocol = 0;
+  if (strcmp(prot, "B") == 0) {
+    protocol = WIFI_PROTOCOL_11B;
+  } else if (strcmp(prot, "BG") == 0) {
+    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G);
+  } else if (strcmp(prot, "BGN") == 0) {
+    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+  } else if (strcmp(prot, "LR") == 0) {
+    protocol = WIFI_PROTOCOL_LR;
+  } else if (strcmp(prot, "BLR") == 0) {
+    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_LR);
+  } else if (strcmp(prot, "BGLR") == 0) {
+    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_LR);
+  } else if (strcmp(prot, "BGNLR") == 0) {
+    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N |
+                WIFI_PROTOCOL_LR);
+  } else {
+    return ESP_ERR_NOT_SUPPORTED;
+  }
+  LOG(LL_INFO, ("WiFi %s: protocol %s (%#x)",
+                (ifx == WIFI_IF_STA ? "STA" : "AP"), prot, protocol));
+  return esp_wifi_set_protocol(ifx, protocol);
+}
+
 bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   bool result = false;
   esp_err_t r;
@@ -342,11 +367,11 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
   wifi_sta_config_t *stacfg = &wcfg.sta;
 
   if (!cfg->enable) {
-    result = (esp32_wifi_remove_mode(WIFI_MODE_STA) == ESP_OK);
+    result = (esp32xx_wifi_remove_mode(WIFI_MODE_STA) == ESP_OK);
     goto out;
   }
 
-  r = esp32_wifi_add_mode(WIFI_MODE_STA);
+  r = esp32xx_wifi_add_mode(WIFI_MODE_STA);
   if (r != ESP_OK) goto out;
 
   /* In case already connected, disconnect. */
@@ -397,7 +422,7 @@ bool mgos_wifi_dev_sta_setup(const struct mgos_config_wifi_sta *cfg) {
     esp_netif_dhcpc_start(sta_if);
   }
 
-  r = esp32_wifi_protocol_setup(WIFI_IF_STA, cfg->protocol);
+  r = esp32xx_wifi_protocol_setup(WIFI_IF_STA, cfg->protocol);
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set STA protocol: %s", esp_err_to_name(r)));
     goto out;
@@ -501,11 +526,11 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
 
   if (!cfg->enable) {
     s_ap_nat_enable = false;
-    result = (esp32_wifi_remove_mode(WIFI_MODE_AP) == ESP_OK);
+    result = (esp32xx_wifi_remove_mode(WIFI_MODE_AP) == ESP_OK);
     goto out;
   }
 
-  if (esp32_wifi_add_mode(WIFI_MODE_AP) != ESP_OK) goto out;
+  if (esp32xx_wifi_add_mode(WIFI_MODE_AP) != ESP_OK) goto out;
 
   strncpy((char *) apcfg->ssid, cfg->ssid, sizeof(apcfg->ssid));
   mgos_expand_mac_address_placeholders((char *) apcfg->ssid);
@@ -568,25 +593,25 @@ bool mgos_wifi_dev_ap_setup(const struct mgos_config_wifi_ap *cfg) {
     LOG(LL_ERROR, ("WiFi AP: Failed to set the bandwidth: %d", r));
     goto out;
   }
-  r = esp32_wifi_protocol_setup(WIFI_IF_AP, cfg->protocol);
+  r = esp32xx_wifi_protocol_setup(WIFI_IF_AP, cfg->protocol);
   if (r != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set AP protocol: %s", esp_err_to_name(r)));
     goto out;
   }
-  if ((r = esp32_wifi_ensure_start()) != ESP_OK) {
+  if ((r = esp32xx_wifi_ensure_start()) != ESP_OK) {
     goto out;
   }
 #if IP_NAPT
   s_ap_nat_enable = cfg->ipv4_nat_enable;
 #endif
-  esp32_wifi_ap_update_dns();
+  esp32xx_wifi_ap_update_dns();
   esp_wifi_set_inactive_time(WIFI_IF_AP, ESP32_WIFI_AP_CLIENT_TIMEOUT_SEC);
   if ((r = esp_netif_dhcps_start(ap_if)) != ESP_OK &&
       r != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) {
     LOG(LL_ERROR, ("WiFi AP: Failed to start DHCP server: %d", r));
     goto out;
   }
-  mgos_invoke_cb(esp32_wifi_ap_enable_nat, NULL, false /* from_isr */);
+  mgos_invoke_cb(esp32xx_wifi_ap_enable_nat, NULL, false /* from_isr */);
   ip4_addr_t gw = {.addr = info.gw.addr};
   LOG(LL_INFO, ("WiFi AP IP: %s/%s gw %s, DHCP range: %s - %s, NAT? %d",
                 cfg->ip, cfg->netmask, (gw.addr ? ip4addr_ntoa(&gw) : "(none)"),
@@ -598,11 +623,11 @@ out:
 }
 
 bool mgos_wifi_dev_sta_connect(void) {
-  if ((esp32_wifi_ensure_init() != ESP_OK) ||
-      (esp32_wifi_ensure_start() != ESP_OK)) {
+  if ((esp32xx_wifi_ensure_init() != ESP_OK) ||
+      (esp32xx_wifi_ensure_start() != ESP_OK)) {
     return false;
   }
-  wifi_mode_t cur_mode = esp32_wifi_get_mode();
+  wifi_mode_t cur_mode = esp32xx_wifi_get_mode();
   if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) {
     return false;
   }
@@ -617,7 +642,7 @@ bool mgos_wifi_dev_sta_connect(void) {
 }
 
 bool mgos_wifi_dev_sta_disconnect(void) {
-  wifi_mode_t cur_mode = esp32_wifi_get_mode();
+  wifi_mode_t cur_mode = esp32xx_wifi_get_mode();
   if (cur_mode == WIFI_MODE_NULL || cur_mode == WIFI_MODE_AP) {
     return false;
   }
@@ -645,20 +670,20 @@ bool mgos_wifi_dev_get_ip_info(int if_instance,
   return mgos_lwip_if_get_ip_info(nif, (cfg ? cfg->nameserver : NULL), ip_info);
 }
 
-void esp32_wifi_net_ev(int ev, void *evd, void *arg) {
+void esp32xx_wifi_net_ev(int ev, void *evd, void *arg) {
   if (ev != MGOS_NET_EV_IP_ACQUIRED && ev != MGOS_NET_EV_DISCONNECTED) {
     return;
   }
   // Keep AP's DNS offer up to date.
-  esp32_wifi_ap_update_dns();
+  esp32xx_wifi_ap_update_dns();
 }
 
 void mgos_wifi_dev_init(void) {
   esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-                             esp32_wifi_event_handler, NULL);
+                             esp32xx_wifi_event_handler, NULL);
   esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                             esp32_wifi_ip_event_handler, NULL);
-  mgos_event_add_group_handler(MGOS_EVENT_GRP_NET, esp32_wifi_net_ev, NULL);
+                             esp32xx_wifi_ip_event_handler, NULL);
+  mgos_event_add_group_handler(MGOS_EVENT_GRP_NET, esp32xx_wifi_net_ev, NULL);
 }
 
 void mgos_wifi_dev_deinit(void) {
@@ -679,8 +704,8 @@ int mgos_wifi_sta_get_rssi(void) {
 }
 
 bool mgos_wifi_dev_start_scan(void) {
-  esp_err_t r = esp32_wifi_add_mode(WIFI_MODE_STA);
-  if (r == ESP_OK) r = esp32_wifi_ensure_start();
+  esp_err_t r = esp32xx_wifi_add_mode(WIFI_MODE_STA);
+  if (r == ESP_OK) r = esp32xx_wifi_ensure_start();
   if (r == ESP_OK) {
     wifi_scan_config_t scan_cfg = {
         .scan_type = WIFI_SCAN_TYPE_ACTIVE,
@@ -694,30 +719,4 @@ bool mgos_wifi_dev_start_scan(void) {
     r = esp_wifi_scan_start(&scan_cfg, false /* block */);
   }
   return (r == ESP_OK);
-}
-
-esp_err_t esp32_wifi_protocol_setup(wifi_interface_t ifx, const char *prot) {
-  if (mgos_conf_str_empty(prot)) return ESP_OK;
-  uint8_t protocol = 0;
-  if (strcmp(prot, "B") == 0) {
-    protocol = WIFI_PROTOCOL_11B;
-  } else if (strcmp(prot, "BG") == 0) {
-    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G);
-  } else if (strcmp(prot, "BGN") == 0) {
-    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
-  } else if (strcmp(prot, "LR") == 0) {
-    protocol = WIFI_PROTOCOL_LR;
-  } else if (strcmp(prot, "BLR") == 0) {
-    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_LR);
-  } else if (strcmp(prot, "BGLR") == 0) {
-    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_LR);
-  } else if (strcmp(prot, "BGNLR") == 0) {
-    protocol = (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N |
-                WIFI_PROTOCOL_LR);
-  } else {
-    return ESP_ERR_NOT_SUPPORTED;
-  }
-  LOG(LL_INFO, ("WiFi %s: protocol %s (%#x)",
-                (ifx == WIFI_IF_STA ? "STA" : "AP"), prot, protocol));
-  return esp_wifi_set_protocol(ifx, protocol);
 }
