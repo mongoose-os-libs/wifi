@@ -113,7 +113,7 @@ conds:
           esp_wifi wpa_supplicant
         ESP_IDF_SDKCONFIG_OPTS: >
           ${build_vars.ESP_IDF_SDKCONFIG_OPTS}
-          CONFIG_WIFI_ENABLED=y
+          CONFIG_ESP32_WIFI_ENABLED=y
           CONFIG_ESP32_WIFI_SW_COEXIST_ENABLE=n
           CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM=4
           CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM=16
@@ -151,7 +151,7 @@ conds:
           esp_wifi wpa_supplicant
         ESP_IDF_SDKCONFIG_OPTS: >
           ${build_vars.ESP_IDF_SDKCONFIG_OPTS}
-          CONFIG_WIFI_ENABLED=y
+          CONFIG_ESP32_WIFI_ENABLED=y
           CONFIG_ESP32_WIFI_SW_COEXIST_ENABLE=n
           CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM=4
           CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM=16
