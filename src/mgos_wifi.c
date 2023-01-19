@@ -407,6 +407,21 @@ static void mgos_wifi_dns_ev_handler(struct mg_connection *c, int ev,
   (void) user_data;
 }
 
+int mgos_wifi_sta_get_signal_strength(void) {
+  int quality;
+  int rssi = mgos_wifi_sta_get_rssi();
+
+  if (rssi == 0 || rssi <= -100) {
+    quality = 0;
+  } else if (rssi >= -50) {
+    quality = 100;
+  } else {
+    quality = 2 * (rssi + 100);
+  }
+
+  return quality;
+}
+
 bool mgos_wifi_init(void) {
   s_wifi_lock = mgos_rlock_create();
   mgos_event_register_base(MGOS_WIFI_EV_BASE, "wifi");
